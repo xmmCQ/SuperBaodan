@@ -1,0 +1,20 @@
+# Local work records, sessions, configuration and backups
+/data/
+/workspace/
+
+# Credentials and local environment files
+.env
+.env.*
+!.env.example
+**/auth.json
+**/credentials.json
+*.pem
+*.key
+
+# Dependencies and generated files
+node_modules/
+coverage/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

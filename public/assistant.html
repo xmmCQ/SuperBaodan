@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>超级宝蛋</title>
+  <link rel="icon" href="/favicon-32.png">
+  <link rel="stylesheet" href="/assistant-tokens.css?v=1">
+  <link rel="stylesheet" href="/ui-dialog.css?v=5">
+  <link rel="stylesheet" href="/icon-actions.css?v=4">
+  <link rel="stylesheet" href="/workspace-switcher.css?v=3">
+  <link rel="stylesheet" href="/markdown.css?v=1">
+  <link rel="stylesheet" href="/assistant.css?v=29">
+</head>
+<body class="assistant-page">
+  <div class="assistant-shell workspace-closed">
+    <aside class="sidebar">
+      <div class="brand-row">
+        <img src="/baodan-avatar.png" alt="宝蛋">
+        <div><b>超级宝蛋</b><small>Windows Pi</small></div>
+      </div>
+      <button id="workspaceSwitcher" class="workspace-trigger" type="button"><svg aria-hidden="true"><use href="/icons.svg?v=3#folder"></use></svg><span data-workspace-label>选择工作区</span><svg class="workspace-trigger-chevron" aria-hidden="true"><use href="/icons.svg?v=3#chevron-down"></use></svg></button>
+      <div class="session-tools">
+        <input id="sessionSearch" type="search" placeholder="搜索历史对话" autocomplete="off">
+        <button id="newSession" class="sidebar-new-session icon-action assistant-primary tooltip-down" type="button" aria-label="新建对话" data-tooltip="新建对话"><svg aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
+      </div>
+      <div class="section-title"><span>历史对话</span><button id="refreshSessions" class="icon-action tooltip-down" type="button" aria-label="刷新历史对话" data-tooltip="刷新历史对话"><svg aria-hidden="true"><use href="/icons.svg#refresh-cw"></use></svg></button></div>
+      <div id="sessionList" class="session-list"><div class="muted">正在读取……</div></div>
+      <div class="sidebar-footer-actions">
+        <a class="home-link icon-action icon-green" href="/" aria-label="返回工作台" data-tooltip="返回工作台"><svg aria-hidden="true"><use href="/icons.svg#house"></use></svg></a>
+        <button id="exitWorkbench" class="exit-link icon-action icon-danger" type="button" aria-label="退出工作台" data-tooltip="退出工作台"><svg aria-hidden="true"><use href="/icons.svg#power"></use></svg></button>
+      </div>
+    </aside>
+
+    <main class="chat-main">
+      <header class="toolbar">
+        <div class="runtime-state"><i id="runtimeDot"></i><span id="runtimeText">正在连接 Windows Pi</span></div>
+        <div class="model-picker">
+          <button id="modelPickerButton" class="model-picker-button">读取模型……</button>
+          <div id="modelPickerPanel" class="model-picker-panel hidden">
+            <input id="modelFilter" type="search" placeholder="搜索模型名称或ID" autocomplete="off">
+            <div id="modelPickerList" class="model-picker-list"></div>
+          </div>
+        </div>
+        <select id="thinkingSelect" aria-label="思考等级"><option value="off">off</option></select>
+        <button id="settingsButton" class="icon-action tooltip-down" type="button" aria-label="设置" data-tooltip="设置"><svg aria-hidden="true"><use href="/icons.svg#settings"></use></svg></button>
+        <button id="compactButton" class="icon-action tooltip-down" type="button" aria-label="压缩上下文" data-tooltip="压缩上下文"><svg aria-hidden="true"><use href="/icons.svg#minimize-2"></use></svg></button>
+        <button id="statsButton" class="icon-action tooltip-down" type="button" aria-label="会话信息" data-tooltip="会话信息"><svg aria-hidden="true"><use href="/icons.svg#circle-info"></use></svg></button>
+        <button id="showWorkspace" class="icon-action tooltip-down" type="button" aria-label="显示或折叠文件工作区" data-tooltip="文件工作区"><svg aria-hidden="true"><use href="/icons.svg#panel-right"></use></svg></button>
+      </header>
+
+      <section id="messages" class="messages">
+        <div class="welcome">
+          <img src="/baodan-assistant.png" alt="宝蛋">
+          <h1>我已就绪</h1>
+          <p>来了！我是帮你搬砖的宝蛋，可以在设置里配置模型和skill哦~</p>
+        </div>
+      </section>
+
+      <div id="toolStatus" class="tool-status hidden"></div>
+      <div id="notice" class="notice hidden"></div>
+
+      <footer class="composer-wrap">
+        <div id="attachments" class="attachments hidden"></div>
+        <div class="composer">
+          <button id="attachButton" class="attach icon-action" type="button" aria-label="添加图片" data-tooltip="添加图片"><svg aria-hidden="true"><use href="/icons.svg?v=2#image"></use></svg></button>
+          <input id="imageInput" type="file" accept="image/*" multiple hidden>
+          <div class="prompt-box">
+            <textarea id="promptInput" rows="1" placeholder="输入指令；键入 @ 搜索工作区文件"></textarea>
+            <div id="atFileMenu" class="at-file-menu hidden"></div>
+          </div>
+          <button id="stopButton" class="icon-action icon-danger hidden" type="button" aria-label="停止回复" data-tooltip="停止回复"><svg aria-hidden="true"><use href="/icons.svg#square-stop"></use></svg></button>
+          <button id="sendButton" class="icon-action assistant-primary" type="button" aria-label="发送" data-tooltip="发送"><svg aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg></button>
+        </div>
+        <div class="footer-meta"><span id="contextMeta"></span></div>
+      </footer>
+    </main>
+
+    <aside class="workspace-panel">
+      <header class="workspace-head">
+        <b id="workspacePanelTitle">文件工作区</b>
+        <div class="workspace-head-actions">
+          <button id="uploadWorkspace" class="icon-action assistant-primary tooltip-down" type="button" aria-label="上传文件到工作区根目录" data-tooltip="上传文件"><svg aria-hidden="true"><use href="/icons.svg?v=2#upload"></use></svg></button>
+          <input id="workspaceUploadInput" type="file" multiple hidden>
+          <button id="collapseWorkspace" class="icon-action tooltip-down" type="button" aria-label="折叠文件工作区" data-tooltip="折叠文件工作区"><svg aria-hidden="true"><use href="/icons.svg#panel-right-close"></use></svg></button>
+        </div>
+      </header>
+      <div class="workspace-search-row">
+        <input id="workspaceSearch" type="search" placeholder="搜索文件名" autocomplete="off">
+        <button id="refreshWorkspace" class="icon-action tooltip-left" type="button" aria-label="刷新文件树" data-tooltip="刷新文件树"><svg aria-hidden="true"><use href="/icons.svg#refresh-cw"></use></svg></button>
+      </div>
+      <div id="workspaceSearchResults" class="workspace-search-results hidden"></div>
+      <section class="workspace-section">
+        <div class="workspace-section-title"><b>本轮文件</b></div>
+        <div id="turnFiles" class="turn-files muted">本轮尚未涉及文件</div>
+      </section>
+      <section class="workspace-section tree-section">
+        <b>文件树</b>
+        <div id="workspaceTree" class="workspace-tree"><div class="muted">正在读取……</div></div>
+      </section>
+      <section class="workspace-section preview-section">
+        <div class="workspace-section-title"><b id="previewTitle">预览</b><button id="insertPreviewPath" class="icon-action tooltip-left hidden" type="button" aria-label="插入@路径" data-tooltip="插入@路径"><svg aria-hidden="true"><use href="/icons.svg#paperclip"></use></svg></button></div>
+        <div id="filePreview" class="file-preview muted">点击文件进行预览</div>
+      </section>
+    </aside>
+  </div>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <div class="dialog-head"><b>设置</b><button id="closeSettings" class="icon-action tooltip-left" type="button" aria-label="关闭设置" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div>
+    <nav class="settings-tabs">
+      <button data-settings-tab="accounts" class="active">模型配置</button>
+      <button data-settings-tab="custom">自定义模型（高级）</button>
+      <button data-settings-tab="preferences">新对话默认设置</button>
+      <button data-settings-tab="skills">技能管理</button>
+    </nav>
+    <section id="accountsTab" class="settings-tab active">
+      <div id="loginProgress" class="login-progress hidden"></div>
+      <div class="provider-search-row">
+        <input id="providerSearch" type="search" placeholder="搜索供应商名称或ID" autocomplete="off" aria-label="搜索供应商">
+      </div>
+      <section id="oauthProviderGroup" class="provider-group">
+        <h3>OAuth供应商</h3>
+        <div id="oauthProviders" class="provider-grid"></div>
+      </section>
+      <section id="apiKeyProviderGroup" class="provider-group">
+        <h3>API Key供应商</h3>
+        <div id="apiKeyProviders" class="provider-grid"></div>
+      </section>
+      <details id="moreProviders" class="provider-more hidden">
+        <summary>更多供应商 <span id="moreProviderCount"></span></summary>
+        <section id="moreOauthGroup" class="provider-more-group">
+          <h4>OAuth供应商</h4>
+          <div id="moreOauthProviders" class="provider-grid"></div>
+        </section>
+        <section id="moreApiKeyGroup" class="provider-more-group">
+          <h4>API Key供应商</h4>
+          <div id="moreApiKeyProviders" class="provider-grid"></div>
+        </section>
+      </details>
+      <div id="providerSearchEmpty" class="muted provider-search-empty hidden">没有匹配的供应商</div>
+    </section>
+    <section id="customTab" class="settings-tab">
+      <div class="config-toolbar">
+        <label>供应商 <select id="providerConfigSelect"></select></label>
+        <button id="addProvider">新增</button><button id="deleteProvider" class="danger-lite">删除</button>
+      </div>
+      <div class="config-card">
+        <h3>供应商配置</h3>
+        <div class="field-grid">
+          <label>ID<input id="providerId" autocomplete="off"></label>
+          <label>名称<input id="providerName" autocomplete="off"></label>
+          <label class="span-2">Base URL<input id="providerBaseUrl" autocomplete="off" placeholder="https://api.example.com/v1"></label>
+          <label>API类型<select id="providerApi"><option value="">继承/选择</option><option>openai-responses</option><option>openai-completions</option><option>anthropic-messages</option><option>google-generative-ai</option><option>azure-openai-responses</option><option>bedrock-converse-stream</option></select></label>
+          <label>API Key<input id="providerApiKey" type="password" autocomplete="new-password" placeholder="留空保留现有值"></label>
+          <label class="check"><input id="providerAuthHeader" type="checkbox">自动添加 Authorization Bearer</label>
+          <label class="span-2">附加请求头（JSON）<textarea id="providerHeaders" rows="3" spellcheck="false">{}</textarea></label>
+          <label class="span-2">供应商兼容参数（JSON）<textarea id="providerCompat" rows="3" spellcheck="false">{}</textarea></label>
+        </div>
+      </div>
+      <div class="config-toolbar">
+        <label>模型 <select id="modelConfigSelect"></select></label>
+        <button id="addModel">新增</button><button id="duplicateModel">复制</button><button id="deleteModel" class="danger-lite">删除</button>
+      </div>
+      <div class="config-card">
+        <h3>模型配置</h3>
+        <div class="field-grid">
+          <label>ID<input id="modelId" autocomplete="off"></label><label>名称<input id="modelName" autocomplete="off"></label>
+          <label>API覆盖<input id="modelApi" autocomplete="off" placeholder="留空继承"></label>
+          <label class="check"><input id="modelReasoning" type="checkbox">推理模型</label>
+          <label class="check"><input id="modelInputText" type="checkbox">文本输入</label><label class="check"><input id="modelInputImage" type="checkbox">图片输入</label>
+          <label>上下文窗口<input id="modelContextWindow" type="number" min="0"></label><label>最大输出<input id="modelMaxTokens" type="number" min="0"></label>
+          <label>输入成本<input id="costInput" type="number" min="0" step="any"></label><label>输出成本<input id="costOutput" type="number" min="0" step="any"></label>
+          <label>缓存读取成本<input id="costCacheRead" type="number" min="0" step="any"></label><label>缓存写入成本<input id="costCacheWrite" type="number" min="0" step="any"></label>
+          <label class="span-2">思考等级映射（JSON）<textarea id="modelThinkingMap" rows="3" spellcheck="false">{}</textarea></label>
+          <label class="span-2">模型兼容参数（JSON）<textarea id="modelCompat" rows="3" spellcheck="false">{}</textarea></label>
+        </div>
+        <div class="config-actions"><button id="testModel">测试连接</button><span id="testModelResult" class="muted"></span></div>
+      </div>
+      <div class="dialog-actions"><button id="reloadModelsConfig">撤销更改</button><button id="saveModelsConfig" class="primary">保存配置</button></div>
+    </section>
+    <section id="preferencesTab" class="settings-tab">
+      <p class="settings-scope-note">以下设置只对新建对话生效，不会切换当前对话。当前对话请使用顶部的模型和思考等级。</p>
+      <div class="field-grid preferences-fields">
+        <label class="span-2">新对话默认模型<select id="defaultModelSelect"></select></label>
+        <label>新对话默认思考等级<select id="defaultThinking"></select></label>
+      </div>
+      <div class="model-preferences-heading">
+        <h3>模型选择器中显示的模型</h3>
+        <div class="model-selection-actions">
+          <button id="selectAllModels" type="button">全选</button>
+          <button id="invertModels" type="button">反选</button>
+        </div>
+      </div>
+      <p class="muted">默认模型必须保持可见；取消勾选可隐藏其他不常用模型。</p>
+      <div id="modelPreferencesList" class="model-preferences-list"></div>
+      <div class="dialog-actions"><button id="savePreferences" class="primary">保存新对话设置</button></div>
+    </section>
+    <section id="skillsTab" class="settings-tab skills-tab">
+      <div class="skills-toolbar">
+        <button id="addSkillButton" class="primary">＋ 添加 Skill</button>
+        <button id="checkAllSkillUpdates">检查全部更新</button>
+        <button id="refreshSkills">↻ 刷新</button>
+        <span id="skillCliStatus" class="muted"></span>
+      </div>
+      <div class="skills-layout">
+        <aside class="skills-sidebar">
+          <input id="skillsFilter" type="search" placeholder="搜索名称或描述" autocomplete="off">
+          <div id="skillsList" class="skills-list"><div class="muted">正在读取……</div></div>
+        </aside>
+        <div id="skillsDetail" class="skills-detail"><div class="muted">选择一个 Skill 查看详情</div></div>
+      </div>
+      <details id="skillDiagnosticsBox" class="skill-diagnostics hidden"><summary>加载诊断</summary><div id="skillDiagnostics"></div></details>
+    </section>
+    <div id="settingsToast" class="settings-toast hidden" role="status" aria-live="polite"></div>
+  </dialog>
+
+  <dialog id="secretDialog" class="secret-dialog">
+    <div class="dialog-head"><b id="secretDialogTitle">输入 API Key</b><button id="closeSecret" class="icon-action tooltip-left" type="button" aria-label="关闭密钥输入" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div>
+    <label>API Key<input id="secretInput" type="password" autocomplete="new-password"></label>
+    <div class="dialog-actions"><button id="cancelSecret">取消</button><button id="submitSecret" class="primary">保存</button></div>
+  </dialog>
+
+  <dialog id="statsDialog"><div class="dialog-head"><b>会话信息</b><button id="closeStats" class="icon-action tooltip-left" type="button" aria-label="关闭会话信息" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div><pre id="statsContent"></pre></dialog>
+  <dialog id="uiDialog" class="ui-dialog">
+    <form id="uiDialogForm" method="dialog">
+      <div class="ui-dialog-head"><h3 id="uiDialogTitle">请确认</h3><button id="uiDialogClose" class="icon-action tooltip-left" type="button" aria-label="关闭对话框" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div>
+      <p id="uiDialogMessage" class="ui-dialog-message"></p>
+      <div id="uiDialogField" class="ui-dialog-field"></div>
+      <div class="ui-dialog-actions"><button id="uiDialogCancel" type="button">取消</button><button id="uiDialogConfirm" type="submit">确定</button></div>
+    </form>
+  </dialog>
+  <script src="/vendor/markdown-it-14.1.0.min.js"></script>
+  <script type="module" src="/assistant.js?v=53"></script>
+</body>
+</html>

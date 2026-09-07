@@ -1,0 +1,46 @@
+:root {
+  --color-canvas: #f7faff;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f3f8ff;
+  --color-border: #e2e8f0;
+  --color-border-accent: #dbeafe;
+  --color-text: #0f172a;
+  --color-muted: #64748b;
+  --color-accent: #3b82f6;
+  --color-accent-strong: #1d4ed8;
+  --color-accent-soft: #eff6ff;
+  --color-danger: #dc5a5a;
+  --color-success: #789a45;
+  --radius-control: 999px;
+  --radius-card: 14px;
+  --shadow-elevated: 0 16px 44px rgba(43, 87, 142, .12);
+  --shadow-soft: 0 4px 18px rgba(43, 87, 142, .07);
+
+  /* Assistant values consumed by the shared workspace switcher. */
+  --workspace-dialog-border: #dbe5ef;
+  --workspace-dialog-radius: 18px;
+  --workspace-dialog-background: var(--color-surface);
+  --workspace-dialog-color: var(--color-text);
+  --workspace-dialog-shadow: 0 24px 70px rgba(32, 67, 108, .2);
+  --workspace-head-button-font-size: 14px;
+  --workspace-toolbar-button-weight: 400;
+  --workspace-picker-primary-weight: 650;
+  --workspace-action-font-size: 14px;
+
+  /* Compatibility aliases used by shared assistant components. */
+  --bg: var(--color-canvas);
+  --panel: var(--color-surface);
+  --line: var(--color-border);
+  --line-blue: var(--color-border-accent);
+  --text: var(--color-text);
+  --muted: var(--color-muted);
+  --accent: var(--color-accent);
+  --accent2: var(--color-accent-strong);
+  --accent-soft: var(--color-accent-soft);
+  --accent-pale: var(--color-border-accent);
+  --user: var(--color-accent);
+  --tool: #f1f5f9;
+  --danger: var(--color-danger);
+  --success: var(--color-success);
+  --shadow: var(--shadow-elevated);
+}

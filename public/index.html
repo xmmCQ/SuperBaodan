@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN" class="app-loading">
+<head>
+  <meta charset="UTF-8">
+  <title>超级宝蛋</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=5">
+  <link rel="stylesheet" href="/styles.css?v=38">
+  <link rel="stylesheet" href="/ui-dialog.css?v=5">
+  <link rel="stylesheet" href="/icon-actions.css?v=4">
+  <link rel="stylesheet" href="/workspace-switcher.css?v=3">
+  <link rel="stylesheet" href="/markdown.css?v=1">
+</head>
+<body aria-busy="true">
+  <div class="app-loading-screen" role="status" aria-live="polite"><i aria-hidden="true"></i><span>工作台加载中……</span></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><img src="/baodan-avatar.png?v=6" alt="宝蛋"></div>
+        <div class="brand-copy">
+          <div class="brand-kicker">YOUR WORKSPACE</div>
+          <h1>超级宝蛋</h1>
+          <p id="todayLabel">加载中</p>
+        </div>
+      </div>
+      <div class="quick-actions">
+        <button id="workspaceSwitcher" class="workspace-trigger" type="button"><svg aria-hidden="true"><use href="/icons.svg?v=3#folder"></use></svg><span data-workspace-label>选择工作区</span><svg class="workspace-trigger-chevron" aria-hidden="true"><use href="/icons.svg?v=3#chevron-down"></use></svg></button>
+        <button class="icon-action icon-accent tooltip-down" id="refreshButton" type="button" aria-label="刷新工作待办" data-tooltip="刷新工作待办"><svg aria-hidden="true"><use href="/icons.svg#refresh-cw"></use></svg></button>
+        <button class="icon-action icon-primary tooltip-down" id="openAppsButton" type="button" aria-label="打开工作软件" data-tooltip="打开工作软件"><svg aria-hidden="true"><use href="/icons.svg#grid-2x2"></use></svg></button>
+        <button class="icon-action icon-danger tooltip-down" id="exitWorkbenchButton" type="button" aria-label="退出工作台" data-tooltip="退出工作台"><svg aria-hidden="true"><use href="/icons.svg#power"></use></svg></button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="dashboard-column">
+        <div class="overview-grid">
+          <article class="panel calendar-panel">
+            <div class="panel-heading calendar-heading">
+              <div class="panel-title-with-icon">
+                <div class="panel-section-icon"><img src="/calendar-icon.png?v=4" alt="工作日历"></div>
+                <div>
+                  <span class="eyebrow">工作日历</span>
+                  <h2 id="monthTitle"></h2>
+                </div>
+              </div>
+              <div class="calendar-nav">
+                <button class="icon-button icon-action tooltip-down" id="prevMonth" type="button" aria-label="上个月" data-tooltip="上个月"><svg aria-hidden="true"><use href="/icons.svg#chevron-left"></use></svg></button>
+                <button class="today-button" id="todayButton">今天</button>
+                <button class="icon-button icon-action tooltip-down" id="nextMonth" type="button" aria-label="下个月" data-tooltip="下个月"><svg aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg></button>
+              </div>
+            </div>
+            <div class="calendar-weekdays">
+              <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+            <div class="calendar-legend">
+              <span><i class="legend-dot planned"></i>计划</span>
+              <span><i class="legend-dot due"></i>截止</span>
+              <span><i class="legend-dot completed"></i>完成</span>
+              <span><i class="legend-dot overdue"></i>逾期</span>
+              <span><i class="legend-ring pending"></i>待办</span>
+              <span><i class="legend-note"></i>记录</span>
+            </div>
+          </article>
+
+          <article class="panel day-panel">
+            <div class="panel-heading day-heading">
+              <span class="eyebrow">当日详情</span>
+              <div class="day-title-row">
+                <h2 id="selectedDateTitle">今天</h2>
+                <div class="day-heading-actions">
+                  <button class="add-task-button icon-action icon-accent" id="newTaskButton" type="button" aria-label="新增计划" data-tooltip="新增计划"><svg aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
+                  <button class="add-task-button icon-action icon-accent hidden" id="newDailyRecordButton" type="button" aria-label="新增记录" data-tooltip="新增记录"><svg aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
+                  <span class="count-pill" id="dayCount">0 项</span>
+                </div>
+              </div>
+            </div>
+            <div class="day-view-tabs" role="tablist" aria-label="当日详情类型">
+              <button class="active" id="dayTasksTab" type="button" role="tab" aria-selected="true" aria-controls="dayTasksPane">工作安排 <span id="dayTasksTabCount">0</span></button>
+              <button id="dailyRecordsTab" type="button" role="tab" aria-selected="false" aria-controls="dailyRecordsPane">每日记录 <span id="dailyRecordsTabCount">0</span></button>
+            </div>
+            <section id="dayTasksPane" role="tabpanel" aria-labelledby="dayTasksTab">
+              <div class="task-list day-list" id="dayTasks"></div>
+            </section>
+            <section class="daily-records-pane hidden" id="dailyRecordsPane" role="tabpanel" aria-labelledby="dailyRecordsTab">
+              <label class="daily-record-search">
+                <svg aria-hidden="true"><use href="/icons.svg?v=4#search"></use></svg>
+                <input id="dailyRecordSearch" type="search" maxlength="100" autocomplete="off" placeholder="搜索全部历史记录">
+                <button class="hidden" id="clearDailyRecordSearch" type="button">清除</button>
+              </label>
+              <p class="daily-record-search-status hidden" id="dailyRecordSearchStatus"></p>
+              <div class="daily-record-list day-list" id="dailyRecordList"></div>
+            </section>
+          </article>
+        </div>
+
+        <div class="summary-cards">
+          <article class="panel list-panel overdue-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="eyebrow danger">需要处理</span>
+                <h2>遗留工作</h2>
+              </div>
+              <span class="count-pill danger" id="overdueCount">0</span>
+            </div>
+            <div class="task-list" id="overdueTasks"></div>
+          </article>
+
+          <article class="panel list-panel longterm-panel">
+            <div class="panel-heading">
+              <div class="panel-title-with-icon">
+                <div class="panel-section-icon"><img src="/longterm-icon.png?v=1" alt="长期工作"></div>
+                <div>
+                  <span class="eyebrow violet">持续推进</span>
+                  <h2>长期工作</h2>
+                </div>
+              </div>
+              <span class="count-pill violet" id="longtermCount">0</span>
+            </div>
+            <div class="task-list" id="longtermTasks"></div>
+          </article>
+        </div>
+      </section>
+
+      <aside class="panel chat-panel">
+        <div class="chat-header">
+          <div class="assistant-avatar"><img src="/baodan-assistant.png?v=7" alt="宝蛋工作助手"></div>
+          <div>
+            <span class="chat-kicker">工作助手</span>
+            <div class="assistant-title-row">
+              <h2>宝蛋</h2>
+              <span class="assistant-service-dot tooltip-control tooltip-down" id="agentDot" role="status" aria-label="宝蛋正在启动" data-tooltip="宝蛋正在启动"></span>
+            </div>
+          </div>
+          <button class="icon-action icon-accent tooltip-down" id="expandAssistantButton" type="button" aria-label="展开助手" data-tooltip="展开助手"><svg aria-hidden="true"><use href="/icons.svg#maximize-2"></use></svg></button>
+          <button class="button soft chat-vskill-button tooltip-control tooltip-down" id="openVSkillButton" type="button" aria-label="管理VSkill" data-tooltip="管理VSkill">V</button>
+          <button class="icon-button icon-action chat-history-button tooltip-down" id="openChatHistoryButton" type="button" aria-label="历史对话" data-tooltip="历史对话"><svg aria-hidden="true"><use href="/icons.svg#history"></use></svg></button>
+          <button class="icon-button icon-action icon-accent chat-new tooltip-down" id="newChatButton" type="button" aria-label="新建对话" data-tooltip="新建对话"><svg aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
+        </div>
+        <section class="chat-history-drawer hidden" id="chatHistoryDrawer" aria-label="历史对话管理">
+          <div class="history-drawer-header">
+            <div>
+              <span class="chat-kicker">对话管理</span>
+              <h3>历史对话</h3>
+            </div>
+            <div class="history-header-actions">
+              <button class="history-new-button" id="historyNewChatButton" type="button">＋ 新建</button>
+              <button class="icon-button icon-action tooltip-down" id="closeChatHistoryButton" type="button" aria-label="关闭历史对话" data-tooltip="关闭历史对话"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button>
+            </div>
+          </div>
+          <div class="history-tabs" role="tablist">
+            <button class="active" id="historySessionsTab" type="button" role="tab">全部对话</button>
+          </div>
+          <div class="history-list" id="chatHistoryList"></div>
+        </section>
+        <section class="vskill-drawer hidden" id="vskillDrawer" aria-label="VSkill管理">
+          <div class="history-drawer-header">
+            <div>
+              <span class="chat-kicker">快捷指令</span>
+              <h3>VSkill管理</h3>
+            </div>
+            <div class="history-header-actions">
+              <button class="history-new-button" id="newVSkillButton" type="button">＋ 新建</button>
+              <button class="icon-button icon-action tooltip-down" id="closeVSkillButton" type="button" aria-label="关闭VSkill管理" data-tooltip="关闭VSkill管理"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button>
+            </div>
+          </div>
+          <form class="vskill-form hidden" id="vskillForm">
+            <h4 id="vskillFormTitle">新建VSkill</h4>
+            <label><span>名称</span><input id="vskillName" maxlength="30" autocomplete="off" required></label>
+            <label><span>Prompt内容</span><textarea id="vskillPrompt" maxlength="10000" rows="8" required></textarea></label>
+            <div class="vskill-form-actions">
+              <button class="button ghost" id="cancelVSkillButton" type="button">取消</button>
+              <button class="button primary" id="saveVSkillButton" type="submit">保存</button>
+            </div>
+          </form>
+          <div class="vskill-list" id="vskillList"></div>
+        </section>
+        <div class="chat-messages" id="chatMessages">
+          <div class="welcome-card">
+            <strong>早上好</strong>
+            <p>来了！我是帮你搬砖的宝蛋，请指示！</p>
+          </div>
+        </div>
+        <div class="vskill-quickbar hidden" id="vskillQuickbar" aria-label="VSkill快捷指令"></div>
+        <div class="chat-status hidden" id="chatStatus"></div>
+        <form class="chat-composer" id="chatForm">
+          <textarea id="chatInput" rows="1" placeholder="输入工作指令或直接提问……"></textarea>
+          <button class="icon-action icon-primary" type="submit" id="sendButton" aria-label="发送" data-tooltip="发送"><svg aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg></button>
+        </form>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+  <div class="modal-backdrop hidden" id="appsModal">
+    <div class="modal">
+      <div class="modal-heading">
+        <h3>工作软件</h3>
+        <button class="icon-button icon-action tooltip-left" id="closeAppsModal" type="button" aria-label="关闭工作软件结果" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button>
+      </div>
+      <div id="appsResults" class="apps-results"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="taskModal">
+    <form class="modal task-modal" id="taskForm">
+      <div class="modal-heading">
+        <div>
+          <span class="eyebrow">同步至工作待办.md</span>
+          <h3 id="taskModalTitle">新增工作计划</h3>
+        </div>
+        <button class="icon-button icon-action tooltip-left" id="closeTaskModal" type="button" aria-label="关闭新增计划" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button>
+      </div>
+      <label class="form-field">
+        <span>事项内容</span>
+        <textarea id="taskText" rows="4" maxlength="500" required placeholder="输入工作事项"></textarea>
+      </label>
+      <div class="form-grid">
+        <label class="form-field date-field">
+          <span>计划日</span>
+          <input id="taskPlannedDate" type="text" inputmode="none" readonly placeholder="选择日期" aria-haspopup="dialog" aria-expanded="false" autocomplete="off">
+        </label>
+        <label class="form-field date-field">
+          <span>截止日</span>
+          <input id="taskDueDate" type="text" inputmode="none" readonly placeholder="选择日期" aria-haspopup="dialog" aria-expanded="false" autocomplete="off">
+        </label>
+      </div>
+      <section class="task-date-picker hidden" id="taskDatePicker" aria-label="选择日期">
+        <div class="date-picker-heading">
+          <button class="icon-action tooltip-down" type="button" id="datePickerPrev" aria-label="上个月" data-tooltip="上个月"><svg aria-hidden="true"><use href="/icons.svg#chevron-left"></use></svg></button>
+          <strong id="datePickerTitle"></strong>
+          <button class="icon-action tooltip-down" type="button" id="datePickerNext" aria-label="下个月" data-tooltip="下个月"><svg aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg></button>
+        </div>
+        <div class="date-picker-weekdays" aria-hidden="true">
+          <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+        </div>
+        <div class="date-picker-grid" id="datePickerGrid"></div>
+        <div class="date-picker-footer">
+          <span>默认定位到当前选中的日历日期</span>
+          <button type="button" id="datePickerClear">清除</button>
+        </div>
+      </section>
+      <label class="form-field">
+        <span>循环频率</span>
+        <select id="taskRecurrence">
+          <option value="">不循环</option>
+          <option value="day">每天（every day）</option>
+          <option value="week">每周（every week）</option>
+          <option value="month">每月（every month）</option>
+          <option value="year">每年（every year）</option>
+        </select>
+      </label>
+      <label class="completion-field">
+        <input id="taskChecked" type="checkbox">
+        <span>标记为已完成</span>
+      </label>
+      <p class="form-hint">循环任务会写入对应的 🔁 every… 标记；完成时会自动写入今天的实际完成日期。</p>
+      <div class="modal-actions">
+        <button class="button ghost" id="cancelTaskButton" type="button">取消</button>
+        <button class="button primary" id="saveTaskButton" type="submit">保存并同步</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="dailyRecordModal">
+    <form class="modal daily-record-modal" id="dailyRecordForm">
+      <div class="modal-heading">
+        <div>
+          <span class="eyebrow" id="dailyRecordDateLabel">每日记录</span>
+          <h3 id="dailyRecordModalTitle">新增记录</h3>
+        </div>
+        <button class="icon-button icon-action tooltip-left" id="closeDailyRecordModal" type="button" aria-label="关闭记录编辑器" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button>
+      </div>
+      <div class="daily-record-fields">
+        <label class="form-field daily-record-title-field"><span>标题</span><input id="dailyRecordTitle" maxlength="100" autocomplete="off" required placeholder="例如：票据项目例会"></label>
+        <label class="form-field"><span>类型</span><select id="dailyRecordType"><option value="work">工作记录</option><option value="meeting">会议纪要</option><option value="idea">想法随记</option><option value="other">其他</option></select></label>
+        <label class="form-field"><span>时间（可选）</span><input id="dailyRecordTime" type="time"></label>
+      </div>
+      <div class="daily-record-editor-split">
+        <label class="daily-record-editor-pane"><span>Markdown 正文</span><textarea id="dailyRecordContent" maxlength="50000" required placeholder="记录会议讨论、结论和后续行动……"></textarea></label>
+        <section class="daily-record-editor-pane preview"><span>实时预览</span><article class="daily-record-preview markdown-body" id="dailyRecordPreview"></article></section>
+      </div>
+      <div class="modal-actions">
+        <button class="button ghost" id="cancelDailyRecordButton" type="button">取消</button>
+        <button class="button primary" id="saveDailyRecordButton" type="submit">保存记录</button>
+      </div>
+    </form>
+  </div>
+
+  <dialog id="uiDialog" class="ui-dialog">
+    <form id="uiDialogForm" method="dialog">
+      <div class="ui-dialog-head"><h3 id="uiDialogTitle">请确认</h3><button class="icon-action tooltip-left" id="uiDialogClose" type="button" aria-label="关闭对话框" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div>
+      <p id="uiDialogMessage" class="ui-dialog-message"></p>
+      <div id="uiDialogField" class="ui-dialog-field"></div>
+      <div class="ui-dialog-actions"><button id="uiDialogCancel" type="button">取消</button><button id="uiDialogConfirm" type="submit">确定</button></div>
+    </form>
+  </dialog>
+
+  <script src="/vendor/markdown-it-14.1.0.min.js"></script>
+  <script type="module" src="/app.js?v=56"></script>
+</body>
+</html>

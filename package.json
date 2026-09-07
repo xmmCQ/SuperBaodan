@@ -1,0 +1,16 @@
+{
+  "name": "super-baodan-workbench",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "参考 pi-web 架构自研的 Windows Pi 工作台",
+  "scripts": {
+    "start": "node launcher.mjs",
+    "server": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:smoke": "node --test test/browser-smoke.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

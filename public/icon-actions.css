@@ -1,0 +1,56 @@
+.icon-action {
+  position: relative;
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  flex: 0 0 36px;
+  padding: 0 !important;
+  display: inline-grid !important;
+  place-items: center;
+  border: 1px solid #e2e5e9 !important;
+  border-radius: 9999px !important;
+  background: #fff !important;
+  color: #17191c !important;
+  line-height: 1 !important;
+  text-decoration: none;
+  box-shadow: none !important;
+  transform: none;
+  isolation: isolate;
+}
+.icon-action:hover { border-color: #cfd5da !important; background: #f5f7f8 !important; transform: translateY(-1px); }
+.icon-action:active { transform: scale(.97); }
+.icon-action:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+.icon-action.hidden { display: none !important; }
+.icon-action svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.icon-action.icon-primary { border-color: #17191c !important; background: #17191c !important; color: #fff !important; }
+.icon-action.icon-primary:hover { border-color: #2b2e32 !important; background: #2b2e32 !important; }
+.icon-action.icon-green { border-color: #789a45 !important; background: #789a45 !important; color: #fff !important; }
+.icon-action.icon-green:hover { border-color: #4f6b2f !important; background: #4f6b2f !important; }
+.icon-action.assistant-primary { border-color: #3b82f6 !important; background: #3b82f6 !important; color: #fff !important; }
+.icon-action.assistant-primary:hover { border-color: #1d4ed8 !important; background: #1d4ed8 !important; }
+.icon-action.icon-danger { border-color: #efcaca !important; background: #fff5f5 !important; color: #b34242 !important; }
+.icon-action.icon-danger:hover { border-color: #b34242 !important; background: #b34242 !important; color: #fff !important; }
+.icon-action.icon-accent:hover { border-color: #cbdcb3 !important; background: #f1f7e8 !important; color: #4f6b2f !important; }
+.tooltip-control { position: relative; }
+.global-tooltip[popover] {
+  position: fixed;
+  inset: auto;
+  z-index: 2147483647;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 16px));
+  margin: 0;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(18, 20, 23, .94);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+  font: 500 12px/1.25 "Segoe UI", "Microsoft YaHei", sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.icon-action[aria-busy="true"] svg { animation: icon-spin .8s linear infinite; }
+@keyframes icon-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .icon-action[aria-busy="true"] svg { animation-duration: 1.8s; } }
