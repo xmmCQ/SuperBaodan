@@ -1,29 +1,28 @@
 # shell-output-guard
 
-独立 Pi 扩展，无额外依赖，不引用超级宝蛋代码。此目录保留源码备份；超级宝蛋运行时不从这里注册扩展。
+可选的 Pi 终端输出重定向防护扩展，无额外依赖。
 
-## 安装位置
+## 部署方式
 
-复制 `index.js` 到用户目录：
+将本目录中的 `index.js` 复制到：
 
 ```text
-C:\Users\niuli2288\.pi\agent\extensions\shell-output-guard\index.js
+%USERPROFILE%\.pi\agent\extensions\shell-output-guard\index.js
 ```
 
-Pi CLI 和使用该 Agent 配置目录的 SDK 会自动发现它。使用其他 Agent 目录或禁用扩展时不会加载。
+使用同一 Pi 用户配置目录的 Pi CLI 和超级宝蛋会自动加载该扩展。本目录仅提供安装源文件，超级宝蛋不会直接从此处加载。
 
-## Hook
+使用自定义 Agent 目录时，将文件安装到该目录下的 `extensions\shell-output-guard\index.js`。禁用扩展时不会加载。
 
-- `before_agent_start`：补充 Bash、PowerShell、CMD 重定向规则。
-- `tool_call`：阻止 Bash/PowerShell 直接把输出写入字面量 `nul` 路径。
-- `user_bash`：通过替代执行结果阻止用户 Bash 命令，不实际运行原命令。
+安装或更新后，完整退出并重新打开超级宝蛋；直接使用 Pi CLI 时，可重启或执行 `/reload`。不要同时在多个自动加载位置安装同一扩展。
 
-不匹配普通引号字符串/注释里的示例，也不拦截 `cmd.exe /c "…2>nul"` 内部的合法 CMD 写法。不解析动态拼接或任意嵌套脚本，不是安全沙箱。
+此扩展配合 Pi 0.84.4 使用。更新 Pi 前建议备份扩展文件；备份应放在扩展自动加载目录之外。
 
-## 更新和备份
+## 产品功能
 
-正常更新 Pi 安装包不会覆盖用户扩展；如果 Pi 更改 Hook API，需要检查兼容性。
+- 提醒助手区分 Bash、PowerShell 和 CMD 的输出重定向方式。
+- 阻止 Bash、PowerShell 直接将输出误写到名为 `nul` 的文件。
+- 对直接执行的用户 Bash 命令提供同类拦截。
+- 保留 CMD 内部合法的 `nul` 重定向，不拦截普通字符串和注释中的示例。
 
-当前使用的 Pi 版本：0.84.4。迁移时另存备份到 `C:\Users\niuli2288\.pi\agent\extension-backups\`，该目录不参与扩展自动发现。
-
-安装或更新后，超级宝蛋需完整重启；直接使用 Pi CLI 时可重启或执行 `/reload`。不要同时在超级宝蛋里内置注册同一扩展。
+该扩展不解析所有动态拼接和嵌套脚本，不替代完整的终端安全防护。
