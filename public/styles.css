@@ -65,9 +65,8 @@ html.app-loading .app-shell { visibility: hidden; opacity: 0; }
 .workspace { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 412px; gap: 18px; align-items: start; }
 .dashboard-column { min-width: 0; display: grid; gap: 18px; }
 .overview-grid { min-width: 0; display: grid; grid-template-columns: minmax(420px, 1.48fr) minmax(370px, .72fr); gap: 18px; }
-.summary-cards { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
 .panel { min-width: 0; max-width: 100%; position: relative; background: var(--canvas); border: 1px solid var(--hairline); border-radius: 24px; }
-.calendar-panel, .day-panel, .list-panel { padding: 24px; }
+.calendar-panel, .day-panel { padding: 24px; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
 .panel-heading h2 { margin: 5px 0 0; color: var(--ink); font-size: 22px; line-height: 1.25; font-weight: 600; letter-spacing: -.35px; }
 .eyebrow { color: var(--slate); font-size: 12px; line-height: 1.4; font-weight: 500; }
@@ -140,11 +139,7 @@ html.app-loading .app-shell { visibility: hidden; opacity: 0; }
 .task-card.task-draggable:active { cursor: grabbing; }
 .task-card.task-draggable.dragging { opacity: .45; transform: scale(.985); border-color: var(--green); box-shadow: none; }
 .task-card.task-draggable .task-check, .task-card.task-draggable .task-edit, .task-card.task-draggable .task-delete { cursor: pointer; }
-.overdue-panel .task-card::before { background: var(--coral); }
-.longterm-panel { background: var(--green-soft); border-color: #dfeacf; }
-.longterm-panel .task-card { background: rgba(255,255,255,.88); border-color: rgba(120,154,69,.12); }
-.longterm-panel .task-card::before { background: var(--green-deep); }
-.task-card-title { color: #2d333b; font-size: 13px; line-height: 1.55; font-weight: 500; }
+.task-card-title { color: #2d333b; font-size: 13px; line-height: 1.55; font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; }
 .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .badge { padding: 4px 8px; border-radius: 9999px; background: #eaedf0; color: var(--slate); font-size: 10px; font-weight: 600; }
 .badge.planned { color: #1748b8; background: #e9efff; }
@@ -299,7 +294,6 @@ html.app-loading .app-shell { visibility: hidden; opacity: 0; }
 .daily-records-pane { min-width: 0; }
 .daily-record-search { height: 38px; margin-bottom: 10px; padding: 0 10px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); }
 .daily-record-search:focus-within { border-color: #7da5ef; background: #fff; box-shadow: 0 0 0 3px rgba(20,86,240,.08); }
-.daily-record-search svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
 .daily-record-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--charcoal); background: transparent; font-size: 12px; }
 .daily-record-search input::-webkit-search-cancel-button { display: none; }
 .daily-record-search button { padding: 4px; border: 0; color: var(--muted); background: transparent; font-size: 10px; }

@@ -1,10 +1,11 @@
 import { createCardOrder, taskOrderKey } from './card-order.js';
+import { createTaskSummary } from './task-summary.js';
 
 export function createTasks({
   state,
   elements: el,
   api,
-  toast,
+  toast: showToast,
   emptyState,
   escapeHtml,
   formatChineseDate,
@@ -12,23 +13,24 @@ export function createTasks({
   loadDashboard: loadDashboardCallback,
   loadDay: loadDayCallback
 }) {
+  const summary = createTaskSummary(el);
+  const toast = (message, error) => { summary.notice(message); showToast(message, error); };
   const roleLabels = { planned: "计划", due: "截止", completed: "完成", ongoing: "进行中" };
   const recurrenceLabels = { day: "每天", week: "每周", month: "每月", year: "每年" };
   const loadDashboard = (...args) => loadDashboardCallback(...args);
   const loadDay = (...args) => loadDayCallback(...args);
   const order = createCardOrder({ container: el.dayTasks, kind: 'tasks', cardSelector: '.task-card', getDate: () => state.selectedDate, keyForItem: taskOrderKey, busy: () => state.taskSaving, onNotice: toast });
 function renderOverdue(tasks) {
-  el.overdueCount.textContent = tasks.length;
-  el.overdueCount.classList.toggle("hidden", tasks.length === 0);
-  renderTaskList(el.overdueTasks, tasks, "没有遗留工作", "✓", (task) => `
+  summary.update('overdue', tasks.length);
+  renderTaskList(el.overdueTasks, tasks, "暂无遗留工作", "✓", (task) => `
     <span class="badge overdue">逾期 ${task.overdueDays} 天</span>
     <span>${task.anchorDate}</span>
     ${sectionMeta(task)}`);
 }
 
 function renderLongTerm(tasks) {
-  el.longtermCount.textContent = tasks.length;
-  renderTaskList(el.longtermTasks, tasks, "没有长期工作", "∞", (task) => `
+  summary.update('longterm', tasks.length);
+  renderTaskList(el.longtermTasks, tasks, "暂无持续工作", "∞", (task) => `
     ${task.recurrence ? `<span class="badge ongoing">${recurrenceLabels[task.recurrence] || task.recurrence}</span>` : ""}
     ${sectionMeta(task)}`);
 }
@@ -54,7 +56,7 @@ function renderTaskList(container, tasks, emptyText, emptyIcon, metaBuilder, all
         </div>
         <div class="task-card-actions">
           <button class="task-edit" data-action="edit" type="button" aria-label="编辑事项">编辑</button>
-          ${allowDelete ? '<button class="task-delete" data-action="delete" type="button" aria-label="删除事项">删除</button>' : ""}
+          ${(container !== el.overdueTasks && (allowDelete || container === el.longtermTasks)) ? '<button class="task-delete" data-action="delete" type="button" aria-label="删除事项">删除</button>' : ""}
         </div>
       </div>`;
   }).join("");
@@ -245,6 +247,7 @@ function closeTaskDatePicker() {
 }
 
 function openTaskModal(task = null) {
+  summary.suspend();
   state.editingTaskId = task?.id || null;
   el.taskModalTitle.textContent = task ? "编辑工作计划" : "新增工作计划";
   el.taskText.value = task?.editableText || "";
@@ -265,6 +268,7 @@ function hideTaskModal() {
   closeTaskDatePicker();
   el.taskModal.classList.add("hidden");
   el.taskForm.reset();
+  summary.resume();
 }
 
 async function saveTaskForm(event) {

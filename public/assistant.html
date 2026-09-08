@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="/core/execution-process.css">
   <link rel="stylesheet" href="/assistant/workspace-panel.css">
   <link rel="stylesheet" href="/assistant/floating-tools.css?v=2">
+  <link rel="stylesheet" href="/core/search-input.css?v=1">
 </head>
 <body class="assistant-page">
   <div class="assistant-shell workspace-closed">
@@ -27,7 +28,7 @@
       </div>
       <button id="workspaceSwitcher" class="workspace-trigger" type="button"><svg aria-hidden="true"><use href="/icons.svg?v=3#folder"></use></svg><span data-workspace-label>选择工作区</span><svg class="workspace-trigger-chevron" aria-hidden="true"><use href="/icons.svg?v=3#chevron-down"></use></svg></button>
       <div class="session-tools">
-        <input id="sessionSearch" type="search" placeholder="搜索当前工作区正文" aria-label="搜索当前工作区的用户和助手文本" maxlength="200" autocomplete="off">
+        <input id="sessionSearch" type="search" placeholder="搜索当前历史会话" aria-label="搜索当前历史会话" maxlength="200" autocomplete="off">
         <button id="newSession" class="sidebar-new-session icon-action assistant-primary tooltip-down" type="button" aria-label="新建对话" data-tooltip="新建对话"><svg aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
       </div>
       <div class="section-title"><span>历史对话</span><button id="refreshSessions" class="icon-action tooltip-down" type="button" aria-label="刷新历史对话" data-tooltip="刷新历史对话"><svg aria-hidden="true"><use href="/icons.svg#refresh-cw"></use></svg></button></div>

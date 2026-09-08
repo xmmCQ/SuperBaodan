@@ -1,0 +1,26 @@
+/* Shared search affordance, including dynamically created workspace/Skill inputs.
+   The daily-record field already has a separate SVG, so do not add it twice. */
+body input[type="search"]:not([id="dailyRecordSearch"]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239298a2' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 11px center;
+  background-size: 16px 16px;
+  padding-left: 34px;
+}
+.daily-record-search svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: #9298a2;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (forced-colors: active) {
+  body input[type="search"]:not([id="dailyRecordSearch"]) {
+    background-image: none;
+    padding-left: 11px;
+  }
+}

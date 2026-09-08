@@ -132,6 +132,7 @@ async function updateTask(req, res, state, id) {
   if (body.text !== undefined) { item.text = body.text; item.editableText = body.text; state.operations.push("task:update"); }
   if (body.plannedDate !== undefined) item.plannedDate = body.plannedDate;
   if (body.dueDate !== undefined) item.dueDate = body.dueDate;
+  if (body.recurrence !== undefined) item.recurrence = body.recurrence;
   if (body.checked !== undefined) { item.checked = body.checked; item.completedDate = body.checked ? TODAY : null; state.operations.push("task:complete"); }
   state.revision += 1; json(res, 200, { ok: true, updatedAt: revision(state) });
 }
