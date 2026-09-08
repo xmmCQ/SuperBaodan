@@ -20,15 +20,23 @@ npm.cmd install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.4
 
 ### 2. 获取并启动
 
-下载仓库源码，或使用 Git 克隆到本机目录。以下以 `D:\Program Files\SuperBaodan` 为例：
+**普通用户推荐下载[最新部署包](https://github.com/xmmCQ/SuperBaodan/releases/latest)。**
+
+1. 在 Release 页面的 Assets 中选择 `SuperBaodan-v版本号-windows.zip`，不要选 GitHub 自动生成的 Source code 压缩包。
+2. 将整个压缩包解压到有写入权限的目录，例如 `D:\Apps\SuperBaodan`，不要直接在压缩包内运行。
+3. 安装好 Node.js 和 Pi 后，双击 `start.cmd`。首次运行会创建空白待办文件，已有文件不会被覆盖。
+
+部署包仅包含运行文件、部署说明和可选扩展，不包含个人数据、账号配置或个人 Skill。首次使用需要自行登录、配置模型及安装所需 Skill。
+
+需要源码的用户也可通过 Git 克隆。以下以 `D:\Program Files\SuperBaodan` 为例：
 
 ```powershell
 git clone https://github.com/xmmCQ/SuperBaodan.git 'D:\Program Files\SuperBaodan'
 cd 'D:\Program Files\SuperBaodan'
-node launcher.mjs
+.\start.cmd
 ```
 
-私有仓库需要先取得访问权限并完成 Git 认证。若通过下载源码部署，进入解压后的项目目录执行 `node launcher.mjs` 即可。
+私有仓库及部署包均需先取得访问权限；浏览器下载需登录有权限的 GitHub 账号，Git 克隆需完成 Git 认证。
 
 启动器会按需启动服务并打开浏览器，默认访问地址：
 
@@ -50,6 +58,7 @@ powershell -ExecutionPolicy Bypass -File 'D:\Program Files\SuperBaodan\install-s
 2. 选择模型及思考等级；也可添加自定义供应商和模型。
 3. 添加需要使用的本机工作区目录。
 4. 按需配置 Skill 和首页固定提示词。
+5. 如需一键打开工作软件，按实际安装位置修改 `scripts\open-work-apps.ps1` 中的程序路径。
 
 Pi 默认配置目录为 `%USERPROFILE%\.pi\agent`，账号、模型和默认设置可与使用同一目录的 Pi 共用。请勿将个人凭据提交到仓库。
 
@@ -66,13 +75,17 @@ Pi 默认配置目录为 `%USERPROFILE%\.pi\agent`，账号、模型和默认设
 
 以上路径均相对于项目目录。待办和每日记录由各工作区共享，对话历史按工作区区分。仓库不包含个人数据、会话和工作区材料，迁移电脑时需要单独备份并迁移这些内容，以及需要保留的 Pi 用户配置。
 
-更新前通过页面“退出工作台”关闭服务，再更新源码并重新打开。Git 部署且本地没有待提交修改时，可执行：
+更新前通过页面“退出工作台”关闭服务，并备份 `data`、`workspace` 及需要保留的 Pi 用户配置。
+
+部署包用户下载新版后，将包内文件覆盖到原程序目录，不删除已有 `data` 和 `workspace`；如修改过工作软件启动路径，覆盖前另行备份对应脚本，更新后恢复配置。随后双击 `start.cmd`。部署包不附带这些数据目录，启动入口也不会覆盖已有待办文件。
+
+Git 部署且本地没有待提交修改时，可执行：
 
 ```powershell
 cd 'D:\Program Files\SuperBaodan'
 git switch main
 git pull --ff-only origin main
-node launcher.mjs
+.\start.cmd
 ```
 
 可通过环境变量 `SUPER_BAODAN_PORT` 调整端口，默认 `3211`；通过 `SUPER_BAODAN_PI_IDLE_MS` 调整助手空闲休眠时间，默认 `600000` 毫秒（10 分钟）。助手休眠后再次使用会自动恢复，工作台页面仍可使用。启动失败时可查看 `data\server-error.log`。
