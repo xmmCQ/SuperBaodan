@@ -1,6 +1,6 @@
 # 超级宝蛋
 
-参考 pi-web 的架构自行实现的轻量 Windows 原生工作台，**未安装、复制或依赖 pi-web**。
+轻量 Windows 原生工作台，集成日历、待办管理与智能助手。
 
 ## 架构
 
@@ -19,7 +19,7 @@ SuperBaodan Windows Node 服务
 Windows Pi：pi --mode rpc
 ```
 
-借鉴 pi-web 的部分：会话与运行时分离、命令与事件分离、实时工具状态、刷新后状态恢复。界面和服务端均为 SuperBaodan 自己实现。
+会话与运行时分离，命令与事件分离，支持实时工具状态与刷新后状态恢复。
 
 ## 运行环境
 
@@ -159,7 +159,7 @@ C:\Users\niuli2288\.pi\agent\settings.json
 C:\Program Files\nodejs\node.exe "D:\Program Files\SuperBaodan\launcher.mjs"
 ```
 
-`launcher.mjs` 检查服务、按需启动 `server.mjs`，再按 pi-web 的方式调用 Windows `cmd.exe /c start` 打开浏览器。整个运行链路不经过 PowerShell。
+`launcher.mjs` 检查服务、按需启动 `server.mjs`，再调用 Windows `cmd.exe /c start` 打开浏览器。整个运行链路不经过 PowerShell。
 
 访问：<http://127.0.0.1:3211>
 
