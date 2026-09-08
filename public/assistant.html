@@ -7,33 +7,43 @@
   <link rel="stylesheet" href="/assistant-tokens.css?v=1">
   <link rel="stylesheet" href="/ui-dialog.css?v=5">
   <link rel="stylesheet" href="/icon-actions.css?v=4">
-  <link rel="stylesheet" href="/workspace-switcher.css?v=3">
+  <link rel="stylesheet" href="/workspace-switcher.css?v=4">
   <link rel="stylesheet" href="/markdown.css?v=1">
   <link rel="stylesheet" href="/assistant.css?v=29">
+  <link rel="stylesheet" href="/core/session-search.css">
+  <link rel="stylesheet" href="/core/reading-settings.css">
+  <link rel="stylesheet" href="/core/reply-actions.css">
+  <link rel="stylesheet" href="/core/conversation-directory.css">
+  <link rel="stylesheet" href="/core/execution-process.css">
+  <link rel="stylesheet" href="/assistant/workspace-panel.css">
+  <link rel="stylesheet" href="/assistant/floating-tools.css?v=2">
+  <link rel="stylesheet" href="/core/search-input.css?v=1">
 </head>
 <body class="assistant-page">
   <div class="assistant-shell workspace-closed">
-    <aside class="sidebar">
+    <aside id="sessionSidebar" class="sidebar">
       <div class="brand-row">
         <img src="/baodan-avatar.png" alt="宝蛋">
         <div><b>超级宝蛋</b><small>Windows Pi</small></div>
       </div>
       <button id="workspaceSwitcher" class="workspace-trigger" type="button"><svg aria-hidden="true"><use href="/icons.svg?v=3#folder"></use></svg><span data-workspace-label>选择工作区</span><svg class="workspace-trigger-chevron" aria-hidden="true"><use href="/icons.svg?v=3#chevron-down"></use></svg></button>
       <div class="session-tools">
-        <input id="sessionSearch" type="search" placeholder="搜索历史对话" autocomplete="off">
+        <input id="sessionSearch" type="search" placeholder="搜索当前历史会话" aria-label="搜索当前历史会话" maxlength="200" autocomplete="off">
         <button id="newSession" class="sidebar-new-session icon-action assistant-primary tooltip-down" type="button" aria-label="新建对话" data-tooltip="新建对话"><svg aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
       </div>
       <div class="section-title"><span>历史对话</span><button id="refreshSessions" class="icon-action tooltip-down" type="button" aria-label="刷新历史对话" data-tooltip="刷新历史对话"><svg aria-hidden="true"><use href="/icons.svg#refresh-cw"></use></svg></button></div>
       <div id="sessionList" class="session-list"><div class="muted">正在读取……</div></div>
+      <div id="sessionSearchResults" class="session-list session-search-results hidden"></div>
       <div class="sidebar-footer-actions">
         <a class="home-link icon-action icon-green" href="/" aria-label="返回工作台" data-tooltip="返回工作台"><svg aria-hidden="true"><use href="/icons.svg#house"></use></svg></a>
         <button id="exitWorkbench" class="exit-link icon-action icon-danger" type="button" aria-label="退出工作台" data-tooltip="退出工作台"><svg aria-hidden="true"><use href="/icons.svg#power"></use></svg></button>
       </div>
     </aside>
 
+    <div id="sidebarResize" class="sidebar-resize" role="separator" aria-orientation="vertical" aria-controls="sessionSidebar" aria-label="调整会话栏宽度" tabindex="0" title="拖动调整会话栏宽度，双击恢复默认"></div>
     <main class="chat-main">
       <header class="toolbar">
-        <div class="runtime-state"><i id="runtimeDot"></i><span id="runtimeText">正在连接 Windows Pi</span></div>
+        <div class="runtime-state" role="status" aria-live="polite"><i id="runtimeDot" aria-hidden="true"></i><span id="runtimeText">正在准备对话……</span></div>
         <div class="model-picker">
           <button id="modelPickerButton" class="model-picker-button">读取模型……</button>
           <div id="modelPickerPanel" class="model-picker-panel hidden">
@@ -43,8 +53,6 @@
         </div>
         <select id="thinkingSelect" aria-label="思考等级"><option value="off">off</option></select>
         <button id="settingsButton" class="icon-action tooltip-down" type="button" aria-label="设置" data-tooltip="设置"><svg aria-hidden="true"><use href="/icons.svg#settings"></use></svg></button>
-        <button id="compactButton" class="icon-action tooltip-down" type="button" aria-label="压缩上下文" data-tooltip="压缩上下文"><svg aria-hidden="true"><use href="/icons.svg#minimize-2"></use></svg></button>
-        <button id="statsButton" class="icon-action tooltip-down" type="button" aria-label="会话信息" data-tooltip="会话信息"><svg aria-hidden="true"><use href="/icons.svg#circle-info"></use></svg></button>
         <button id="showWorkspace" class="icon-action tooltip-down" type="button" aria-label="显示或折叠文件工作区" data-tooltip="文件工作区"><svg aria-hidden="true"><use href="/icons.svg#panel-right"></use></svg></button>
       </header>
 
@@ -59,7 +67,12 @@
       <div id="toolStatus" class="tool-status hidden"></div>
       <div id="notice" class="notice hidden"></div>
 
+      <div class="chat-floating-tools" role="group" aria-label="对话快捷操作">
+          <button id="directoryButton" class="icon-action tooltip-side-left" type="button" aria-label="展开对话目录" data-tooltip="对话目录"><svg aria-hidden="true"><use href="/icons.svg?v=6#list-tree"></use></svg></button>
+          <button id="compactButton" class="icon-action tooltip-side-left" type="button" aria-label="压缩上下文" data-tooltip="压缩上下文"><svg aria-hidden="true"><use href="/icons.svg#minimize-2"></use></svg></button>
+      </div>
       <footer class="composer-wrap">
+        <section id="replyQuote" class="reply-quote hidden" aria-label="引用原文"></section>
         <div id="attachments" class="attachments hidden"></div>
         <div class="composer">
           <button id="attachButton" class="attach icon-action" type="button" aria-label="添加图片" data-tooltip="添加图片"><svg aria-hidden="true"><use href="/icons.svg?v=2#image"></use></svg></button>
@@ -75,7 +88,8 @@
       </footer>
     </main>
 
-    <aside class="workspace-panel">
+    <div id="workspaceResize" class="workspace-resize" role="separator" aria-label="调整文件面板宽度，双击恢复默认" aria-orientation="vertical" tabindex="0"></div>
+    <aside id="workspacePanel" class="workspace-panel">
       <header class="workspace-head">
         <b id="workspacePanelTitle">文件工作区</b>
         <div class="workspace-head-actions">
@@ -89,16 +103,17 @@
         <button id="refreshWorkspace" class="icon-action tooltip-left" type="button" aria-label="刷新文件树" data-tooltip="刷新文件树"><svg aria-hidden="true"><use href="/icons.svg#refresh-cw"></use></svg></button>
       </div>
       <div id="workspaceSearchResults" class="workspace-search-results hidden"></div>
-      <section class="workspace-section">
+      <section class="workspace-section turn-files-section">
         <div class="workspace-section-title"><b>本轮文件</b></div>
         <div id="turnFiles" class="turn-files muted">本轮尚未涉及文件</div>
       </section>
       <section class="workspace-section tree-section">
-        <b>文件树</b>
+        <div class="workspace-section-title"><b>文件树</b><button id="toggleWorkspaceTree" class="icon-action" type="button" aria-label="折叠文件树" aria-expanded="true" aria-controls="workspaceTree">▾</button></div>
         <div id="workspaceTree" class="workspace-tree"><div class="muted">正在读取……</div></div>
       </section>
       <section class="workspace-section preview-section">
-        <div class="workspace-section-title"><b id="previewTitle">预览</b><button id="insertPreviewPath" class="icon-action tooltip-left hidden" type="button" aria-label="插入@路径" data-tooltip="插入@路径"><svg aria-hidden="true"><use href="/icons.svg#paperclip"></use></svg></button></div>
+        <div id="fileTabs" class="file-tabs"></div>
+        <div class="workspace-section-title"><b id="previewTitle">预览</b><div class="preview-actions"><button id="enlargePreview" class="icon-action tooltip-left" type="button" aria-label="放大预览" data-tooltip="放大预览" aria-pressed="false" disabled><svg aria-hidden="true"><use href="/icons.svg#maximize-2"></use></svg></button><button id="insertPreviewPath" class="icon-action tooltip-left hidden" type="button" aria-label="插入@路径" data-tooltip="插入@路径"><svg aria-hidden="true"><use href="/icons.svg#paperclip"></use></svg></button></div></div>
         <div id="filePreview" class="file-preview muted">点击文件进行预览</div>
       </section>
     </aside>
@@ -111,7 +126,9 @@
       <button data-settings-tab="custom">自定义模型（高级）</button>
       <button data-settings-tab="preferences">新对话默认设置</button>
       <button data-settings-tab="skills">技能管理</button>
+      <button data-settings-tab="reading">阅读设置</button>
     </nav>
+    <section id="readingTab" class="settings-tab"></section>
     <section id="accountsTab" class="settings-tab active">
       <div id="loginProgress" class="login-progress hidden"></div>
       <div class="provider-search-row">
@@ -219,7 +236,6 @@
     <div class="dialog-actions"><button id="cancelSecret">取消</button><button id="submitSecret" class="primary">保存</button></div>
   </dialog>
 
-  <dialog id="statsDialog"><div class="dialog-head"><b>会话信息</b><button id="closeStats" class="icon-action tooltip-left" type="button" aria-label="关闭会话信息" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div><pre id="statsContent"></pre></dialog>
   <dialog id="uiDialog" class="ui-dialog">
     <form id="uiDialogForm" method="dialog">
       <div class="ui-dialog-head"><h3 id="uiDialogTitle">请确认</h3><button id="uiDialogClose" class="icon-action tooltip-left" type="button" aria-label="关闭对话框" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div>

@@ -1,3 +1,7 @@
+import { createFileTabs } from "./file-tabs.js";
+import { createWorkspacePanel } from "./workspace-panel.js";
+import { createSidebarResize } from "./sidebar-resize.js";
+
 export function createWorkspaceController({
   state,
   elements: el,
@@ -12,12 +16,26 @@ export function createWorkspaceController({
   resizePrompt,
   loadBootstrap
 }) {
+  let panel, treeController, searchController;
+  const scopeKey = () => state.workspace?.id || state.workspace?.root || null;
+  const fileTabs = createFileTabs({
+    elements: el, createMarkdownArticle, onNotice: showNotice, onError: showError,
+    loadFile: (filePath, options) => api(workspaceUrl(`/api/workspace/preview?path=${encodeURIComponent(filePath)}`), options),
+    contentUrl: workspaceUrl,
+    onActivePath: (filePath) => { state.previewPath = filePath; el.enlargePreview.disabled = !filePath; if (!filePath) panel?.exitExpanded(); },
+  });
+  panel = createWorkspacePanel({
+    shell: document.querySelector(".assistant-shell"), panel: el.workspacePanel, separator: el.workspaceResize,
+    expandButton: el.enlargePreview, treeButton: el.toggleWorkspaceTree, chat: el.messages,
+    getPreviewContainer: fileTabs.activePane,
+  });
+  createSidebarResize({ shell: document.querySelector('.assistant-shell'), sidebar: el.sessionSidebar, separator: el.sidebarResize, panel: el.workspacePanel, chat: el.messages, getPreviewContainer: fileTabs.activePane });
 function toggleWorkspace() {
   setWorkspaceOpen(document.querySelector(".assistant-shell").classList.contains("workspace-closed"));
 }
 
 function setWorkspaceOpen(open) {
-  document.querySelector(".assistant-shell").classList.toggle("workspace-closed", !open);
+  panel.setOpen(open);
   if (open) void loadWorkspaceTree();
 }
 
@@ -28,14 +46,16 @@ function refreshWorkspaceTreeIfOpen() {
 }
 
 async function loadWorkspaceTree() {
+  treeController?.abort();
+  const controller = new AbortController(), scope = scopeKey(); treeController = controller;
   setIconBusy(el.refreshWorkspace, true);
   try {
-    const data = await api(workspaceUrl("/api/workspace/tree?depth=4"));
-    el.workspaceTree.replaceChildren(renderTreeEntries(data.entries || [], true));
+    const data = await api(workspaceUrl("/api/workspace/tree?depth=4"), { signal: controller.signal });
+    if (!controller.signal.aborted && scope === scopeKey()) el.workspaceTree.replaceChildren(renderTreeEntries(data.entries || [], true));
   } catch (error) {
-    el.workspaceTree.textContent = error.message;
+    if (!controller.signal.aborted && scope === scopeKey()) el.workspaceTree.textContent = error.message;
   } finally {
-    setIconBusy(el.refreshWorkspace, false);
+    if (treeController === controller) setIconBusy(el.refreshWorkspace, false);
   }
 }
 
@@ -43,6 +63,7 @@ async function uploadWorkspaceFiles() {
   const files = [...el.workspaceUploadInput.files];
   el.workspaceUploadInput.value = "";
   if (!files.length) return;
+  const uploadScope = scopeKey();
   const originalTooltip = el.uploadWorkspace.dataset.tooltip;
   const uploaded = [];
   const errors = [];
@@ -71,6 +92,7 @@ async function uploadWorkspaceFiles() {
       if (choice === "skip") selected = files.filter((file) => !conflicts.has(file.name.toLocaleLowerCase()));
     }
     for (let index = 0; index < selected.length; index += 1) {
+      if (scopeKey() !== uploadScope) { errors.push("工作区已切换，已停止后续上传"); break; }
       const file = selected[index];
       const progress = `上传中 ${index + 1}/${selected.length}`;
       el.uploadWorkspace.dataset.tooltip = progress;
@@ -86,9 +108,9 @@ async function uploadWorkspaceFiles() {
         errors.push(`${file.name}：${error.message}`);
       }
     }
-    if (uploaded.length) {
+    if (uploaded.length && scopeKey() === uploadScope) {
       await loadWorkspaceTree();
-      await selectWorkspaceFile(uploaded[0]);
+      if (scopeKey() === uploadScope) await selectWorkspaceFile(uploaded[0], { reload: true });
     }
     const skipped = files.length - selected.length;
     const summary = [`已上传 ${uploaded.length} 个文件`];
@@ -136,12 +158,14 @@ function renderTreeEntries(entries, root = false) {
 }
 
 async function searchWorkspaceFiles() {
+  searchController?.abort();
   const query = el.workspaceSearch.value.trim();
   if (!query) { el.workspaceSearchResults.classList.add("hidden"); return; }
+  const controller = new AbortController(), scope = scopeKey(); searchController = controller;
   try {
-    const data = await api(workspaceUrl(`/api/workspace/search?q=${encodeURIComponent(query)}`));
-    renderWorkspaceSearchResults(data.results || [], false);
-  } catch (error) { showError(error); }
+    const data = await api(workspaceUrl(`/api/workspace/search?q=${encodeURIComponent(query)}`), { signal: controller.signal });
+    if (!controller.signal.aborted && scope === scopeKey()) renderWorkspaceSearchResults(data.results || [], false);
+  } catch (error) { if (!controller.signal.aborted && scope === scopeKey()) showError(error); }
 }
 
 function renderWorkspaceSearchResults(results, insertMode) {
@@ -156,33 +180,13 @@ function renderWorkspaceSearchResults(results, insertMode) {
   container.classList.remove("hidden");
 }
 
-async function selectWorkspaceFile(file) {
-  if (file.previewable !== false) return previewWorkspaceFile(file.path);
-  state.previewPath = file.path;
-  el.previewTitle.textContent = file.path;
-  el.insertPreviewPath.classList.remove("hidden");
-  el.filePreview.className = "file-preview muted";
-  el.filePreview.textContent = "此文件不能在页面中预览，可插入 @路径让宝蛋读取处理。";
+async function selectWorkspaceFile(file, options = {}) {
+  if (document.querySelector(".assistant-shell").classList.contains("workspace-closed")) setWorkspaceOpen(true);
+  return fileTabs.open(file.path, { previewable: file.previewable !== false, ...options });
 }
 
-async function previewWorkspaceFile(filePath) {
-  try {
-    const data = await api(workspaceUrl(`/api/workspace/preview?path=${encodeURIComponent(filePath)}`));
-    state.previewPath = data.path;
-    el.previewTitle.textContent = data.path;
-    el.insertPreviewPath.classList.remove("hidden");
-    el.filePreview.replaceChildren();
-    el.filePreview.className = "file-preview";
-    if (["text", "code"].includes(data.kind)) {
-      const pre = document.createElement("pre"); pre.textContent = data.content; el.filePreview.append(pre);
-    } else if (data.kind === "markdown") {
-      el.filePreview.append(createMarkdownArticle(data.content, { onNotice: showNotice }));
-    } else if (data.kind === "image") {
-      const image = document.createElement("img"); image.src = workspaceUrl(data.contentUrl); image.alt = data.path; el.filePreview.append(image);
-    } else if (data.kind === "pdf") {
-      const frame = document.createElement("iframe"); frame.src = workspaceUrl(data.contentUrl); frame.title = data.path; el.filePreview.append(frame);
-    }
-  } catch (error) { showError(error); }
+async function previewWorkspaceFile(filePath, options = {}) {
+  return selectWorkspaceFile({ path: filePath }, options);
 }
 
 function renderTurnFiles() {
@@ -207,9 +211,10 @@ function handlePromptInput() {
   const match = beforeCursor.match(/(?:^|\s)@([^\s@]{1,100})$/);
   if (!match) { el.atFileMenu.classList.add("hidden"); return; }
   state.atSearchTimer = setTimeout(async () => {
+    const scope = scopeKey();
     try {
       const data = await api(workspaceUrl(`/api/workspace/search?q=${encodeURIComponent(match[1])}`));
-      renderWorkspaceSearchResults(data.results || [], true);
+      if (scope === scopeKey()) renderWorkspaceSearchResults(data.results || [], true);
     } catch { el.atFileMenu.classList.add("hidden"); }
   }, 120);
 }
@@ -234,7 +239,16 @@ function scheduleWorkspaceReload(message = "") {
     if (message) showNotice(message);
   }, 80);
 }
-  function setWorkspace(workspace) { state.workspace = workspace; if (workspace) el.workspacePanelTitle.textContent = workspace.name; }
+  function setWorkspace(workspace) {
+    const next = workspace?.id || workspace?.root || null;
+    if (scopeKey() !== next) {
+      treeController?.abort(); searchController?.abort(); clearTimeout(state.atSearchTimer);
+      el.workspaceSearch.value = ""; el.workspaceSearchResults.replaceChildren(); el.workspaceSearchResults.classList.add("hidden");
+      el.atFileMenu.replaceChildren(); el.atFileMenu.classList.add("hidden"); el.workspaceTree.textContent = "正在读取……";
+      fileTabs.setWorkspace(next);
+    }
+    state.workspace = workspace; if (workspace) el.workspacePanelTitle.textContent = workspace.name;
+  }
   function workspace() { return state.workspace; }
   function setTurnFiles(files) { state.turnFiles = files || { involved: [], modified: [] }; renderTurnFiles(); }
   function turnFiles() { return state.turnFiles; }

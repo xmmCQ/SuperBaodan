@@ -13,6 +13,7 @@ export async function createSmokeServer() {
     revision: 1,
     tasks: [],
     dailyRecords: [],
+    holidays: {},
     recordSequence: 0,
     files: new Map(),
     operations: [],
@@ -42,6 +43,10 @@ async function handle(req, res, state) {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && url.pathname === "/api/health") return json(res, 200, { ok: true, assistantInstalled: true, assistantRunning: true, assistantState: "running", workspace: workspace(), today: TODAY });
+    if (req.method === 'GET' && url.pathname === '/api/holidays') {
+      const year = Number(url.searchParams.get('year'));
+      return json(res, 200, state.holidays[year] || { year, region: 'CN', status: 'available', dates: [], source: 'fixture', fetchedAt: '2026-09-04T00:00:00Z', stale: false, warning: null });
+    }
     if (req.method === "GET" && url.pathname === "/api/dashboard") return json(res, 200, dashboard(state));
     const day = url.pathname.match(/^\/api\/day\/(\d{4}-\d{2}-\d{2})$/);
     if (req.method === "GET" && day) return json(res, 200, dayDetails(state, day[1]));
@@ -65,6 +70,11 @@ async function handle(req, res, state) {
     if (req.method === "GET" && url.pathname === "/api/agent/bootstrap") return json(res, 200, bootstrap(state));
     if (req.method === "POST" && url.pathname === "/api/agent/command") return agentCommand(req, res, state);
     if (req.method === "POST" && url.pathname === "/api/agent/new") return newSession(req, res, state);
+    if (req.method === "GET" && url.pathname === "/api/sessions/search") {
+      const result = await state.searchReply?.(url.searchParams.get("q"));
+      if (!res.destroyed) return json(res, 200, result || { complete: true, hits: [] });
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/api/sessions") return json(res, 200, { sessions: state.sessions });
     if (req.method === "POST" && url.pathname === "/api/sessions/activate") return activateSession(req, res, state);
     if (req.method === "POST" && url.pathname === "/api/sessions/rename") return renameSession(req, res, state);
@@ -122,6 +132,7 @@ async function updateTask(req, res, state, id) {
   if (body.text !== undefined) { item.text = body.text; item.editableText = body.text; state.operations.push("task:update"); }
   if (body.plannedDate !== undefined) item.plannedDate = body.plannedDate;
   if (body.dueDate !== undefined) item.dueDate = body.dueDate;
+  if (body.recurrence !== undefined) item.recurrence = body.recurrence;
   if (body.checked !== undefined) { item.checked = body.checked; item.completedDate = body.checked ? TODAY : null; state.operations.push("task:complete"); }
   state.revision += 1; json(res, 200, { ok: true, updatedAt: revision(state) });
 }
@@ -212,7 +223,12 @@ async function deleteSession(req, res, state) { const body = await readJson(req)
 
 async function upload(req, res, url, state) { const content = await readBody(req); const name = url.searchParams.get("name"); state.files.set(name, content); state.operations.push("workspace:upload"); json(res, 201, { ok: true, uploaded: { path: name, name, kind: "file", size: content.length, previewable: true } }); }
 function tree(state) { return { path: "", entries: [...state.files].map(([name, content]) => ({ path: name, name, kind: "file", size: content.length, previewable: true })) }; }
-function preview(res, url, state) { const name = url.searchParams.get("path"); const content = state.files.get(name); state.operations.push("workspace:preview"); json(res, 200, { path: name, kind: "text", content: content?.toString("utf8") || "" }); }
+async function preview(res, url, state) {
+  const name = url.searchParams.get("path"), content = state.files.get(name);
+  state.operations.push("workspace:preview");
+  const override = await state.previewReply?.(name);
+  if (!res.destroyed) json(res, 200, override || { path: name, kind: name.endsWith(".md") ? "markdown" : "text", content: content?.toString("utf8") || "" });
+}
 
 async function staticFile(requestPath, res) {
   const relative = requestPath === "/" ? "index.html" : decodeURIComponent(requestPath.slice(1));

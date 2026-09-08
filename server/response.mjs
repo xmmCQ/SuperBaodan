@@ -82,7 +82,7 @@ export async function serveStatic(publicDir, requestPath, res) {
     const content = await readFile(filePath);
     res.writeHead(200, {
       "Content-Type": mimeType(filePath),
-      "Cache-Control": filePath.endsWith("index.html") ? "no-cache" : "public, max-age=3600",
+      "Cache-Control": [".html", ".js", ".mjs", ".css"].includes(path.extname(filePath)) ? "no-cache" : "public, max-age=3600",
       "X-Content-Type-Options": "nosniff",
     });
     res.end(content);

@@ -6,6 +6,10 @@ import { api } from "/core/api-client.js?v=1";
 import { createAgentClient } from "/core/agent-client.js?v=1";
 import { createAgentEventStream } from "/core/event-stream.js?v=1";
 import { createSessionService } from "/core/session-service.js?v=1";
+import { createSessionSearch } from "/core/session-search.js";
+import { createReadingSettings } from "/core/reading-settings.js";
+import { createReplyActions } from "/core/reply-actions.js";
+import { createConversationDirectory } from "/core/conversation-directory.js";
 import { createHomeState } from "/home/state.js?v=1";
 import { createCalendar } from "/home/calendar.js?v=1";
 import { createDashboard } from "/home/dashboard.js?v=1";
@@ -18,6 +22,7 @@ import { createVSkills } from "/home/vskills.js?v=1";
 
 const state = createHomeState(toLocalDate(new Date()));
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
+createReadingSettings({ container: el.chatMessages, onNotice: toast });
 const uiDialogs = createUiDialogController({
   dialog: el.uiDialog, form: el.uiDialogForm, title: el.uiDialogTitle,
   message: el.uiDialogMessage, field: el.uiDialogField,
@@ -26,6 +31,7 @@ const uiDialogs = createUiDialogController({
 
 let homeChat;
 let vskills;
+let historySearch;
 const workspaceSwitcher = createWorkspaceSwitcher({
   trigger: el.workspaceSwitcher,
   api,
@@ -33,6 +39,7 @@ const workspaceSwitcher = createWorkspaceSwitcher({
   hasDraft: () => Boolean(el.chatInput.value.trim()),
   clearDraft: () => { el.chatInput.value = ""; homeChat?.autoResizeInput(); },
   onActivated: ({ workspace }) => {
+    historySearch?.reset();
     homeChat?.setWorkspace(workspace);
     homeChat?.scheduleHomeWorkspaceReload(`已切换到工作区：${workspace.name}`);
   },
@@ -41,6 +48,8 @@ const workspaceSwitcher = createWorkspaceSwitcher({
 const currentWorkspaceId = () => homeChat?.workspace()?.id || null;
 const agentClient = createAgentClient({ getWorkspaceId: currentWorkspaceId });
 const sessionService = createSessionService({ agentClient, getWorkspaceId: currentWorkspaceId });
+const replyActions = createReplyActions({ container: el.chatMessages, input: el.chatInput, quoteBox: el.replyQuote, getScope: () => `${currentWorkspaceId()}:${state.chat.activeSessionId}`, onNotice: toast });
+const directory = createConversationDirectory({ button: el.directoryButton, container: el.chatMessages, getScope: () => `${currentWorkspaceId()}:${state.chat.activeSessionId}`, loadEarlier: () => homeChat.loadDirectoryPage(), pauseFollow: () => homeChat.pauseFollow(), onLatest: () => homeChat.scrollChat(true), onNotice: toast });
 
 const dayView = createDayView({ state: state.records, elements: el });
 let dashboard;
@@ -52,7 +61,7 @@ const loadSelectedDay = async (date) => {
   if (monthChanged) await dailyRecords.loadMonth(state.planner.month);
 };
 const calendar = createCalendar({
-  state: state.planner, elements: el, toLocalDate, formatChineseDate,
+  state: state.planner, elements: el, api, toLocalDate, formatChineseDate,
   loadDay: loadSelectedDay,
   recordCountForDate: (date) => dailyRecords?.recordCountForDate(date) || 0,
 });
@@ -90,10 +99,22 @@ dailyRecords = createDailyRecords({
 });
 
 homeChat = createHomeChat({
-  state: state.chat, elements: el, api, agentClient, sessionService, workspaceSwitcher,
+  state: state.chat, elements: el, api, agentClient, sessionService, replyActions, directory, workspaceSwitcher,
   renderMarkdown, toast, escapeHtml, formatDateTime, loadingState, uiDialogs,
   closeVSkillDrawer: () => vskills?.closeVSkillDrawer(),
 });
+historySearch = createSessionSearch({
+  input: el.historySearchInput, results: el.historySearchResults, defaultList: el.chatHistoryList,
+  search: sessionService.search, getWorkspaceId: currentWorkspaceId,
+  onOpen: async (hit) => {
+    if (homeChat.isBusy()) throw new Error("请等待当前任务完成后再打开历史会话");
+    await sessionService.activate(hit.sessionPath);
+    await homeChat.loadHomeChatBootstrap();
+    toast(hit.messageIndex == null ? "已打开会话，命中片段保留在搜索结果中" : `已打开会话，命中第${hit.messageIndex + 1}条历史消息`);
+  },
+});
+el.closeChatHistoryButton.addEventListener("click", historySearch.cancel);
+el.openChatHistoryButton.addEventListener("click", historySearch.refresh);
 vskills = createVSkills({
   state: state.vskills, elements: el, api, uiDialogs, toast, escapeHtml,
   getChatBusy: homeChat.isBusy,
@@ -102,10 +123,13 @@ vskills = createVSkills({
 });
 
 const agentEvents = createAgentEventStream({
-  onEvent: homeChat.handleHomeChatEvent,
+  onEvent: (event) => {
+    if (event.type === "workspace_changed" && !event.renamed) historySearch.reset();
+    homeChat.handleHomeChatEvent(event);
+  },
   onStatus: (status, detail) => {
     if (status === "open" && detail.reconnected) {
-      if (!homeChat.isBusy()) void homeChat.syncHomeChatMessages();
+      void homeChat.syncHomeChatMessages();
       void homeChat.loadAgentStatus();
     } else if (status === "reconnecting") homeChat.setAgentStatus("事件连接中断，正在重连", "error");
     else if (status === "parse_error") console.warn("首页助手事件解析失败", detail.error);

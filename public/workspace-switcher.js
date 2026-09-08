@@ -1,4 +1,4 @@
-export function createWorkspaceSwitcher({ trigger, api, uiDialogs, hasDraft = () => false, clearDraft = () => {}, onActivated = async () => {}, onError = console.error }) {
+export function createWorkspaceSwitcher({ trigger, api, uiDialogs, showPathTooltip = true, hasDraft = () => false, clearDraft = () => {}, onActivated = async () => {}, onError = console.error }) {
   let data = { activeWorkspaceId: null, items: [] };
   const manager = buildManagerDialog();
   const picker = buildPickerDialog();
@@ -45,7 +45,8 @@ export function createWorkspaceSwitcher({ trigger, api, uiDialogs, hasDraft = ()
     const item = active();
     const label = trigger.querySelector("[data-workspace-label]");
     if (label) label.textContent = item?.name || "选择工作区";
-    trigger.dataset.tooltip = item?.root || "选择工作区";
+    if (showPathTooltip) trigger.dataset.tooltip = item?.root || "选择工作区";
+    else trigger.removeAttribute("data-tooltip");
     trigger.removeAttribute("title");
   }
 

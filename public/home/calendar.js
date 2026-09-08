@@ -1,4 +1,7 @@
+import { createHolidayMarks } from './holiday-marks.js';
+
 export function createCalendar({
+  api,
   state,
   elements: el,
   toLocalDate,
@@ -6,6 +9,7 @@ export function createCalendar({
   loadDay,
   recordCountForDate = () => 0
 }) {
+const holidays = createHolidayMarks({ container: el.calendarGrid, api });
 function renderCalendar() {
   if (!state.dashboard) return;
   const [year, month] = state.month.split("-").map(Number);
@@ -61,6 +65,7 @@ function renderCalendar() {
     button.addEventListener("click", () => loadDay(dateString));
     el.calendarGrid.appendChild(button);
   }
+  holidays.refresh();
 }
   return { renderCalendar };
 }

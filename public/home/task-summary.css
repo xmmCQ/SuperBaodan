@@ -1,0 +1,22 @@
+.calendar-month-row { display: flex; align-items: center; gap: 12px; }
+.calendar-month-row #monthTitle { margin: 0; white-space: nowrap; }
+.calendar-heading { flex-wrap: wrap; }
+.calendar-heading .calendar-nav { margin-left: auto; flex-shrink: 0; }
+.task-summary-hints { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 0; flex-shrink: 0; }
+.task-summary-pill { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 1px solid #e5e7eb; border-radius: 9999px; background: #fff; color: #222; line-height: 1.4; font-family: inherit; font-size: 14px; font-weight: 500; }
+.task-summary-pill strong { font-weight: 600; }
+.task-summary-pill > .task-summary-icon { width: 18px; height: 18px; flex: none; color: #5f5f5f; }
+#openOverdueTasks > .task-summary-icon { color: #c66b6b; }
+.task-summary-pill:hover { background: #f7f8fa; }
+.task-summary-pill:focus-visible, .task-summary-dialog button:focus-visible { outline: 2px solid #222; outline-offset: 3px; }
+.task-summary-dialog { width: 620px; max-width: calc(100vw - 64px); max-height: 75vh; padding: 0; margin: auto; border: 1px solid #e5e7eb; border-radius: 16px; background: #fff; color: #222; box-shadow: 0 12px 32px rgb(0 0 0 / 10%); overflow: hidden; }
+.task-summary-dialog[open] { display: flex; flex-direction: column; }
+.task-summary-dialog::backdrop { background: rgb(0 0 0 / 18%); }
+.task-summary-dialog > header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-bottom: 1px solid #eaecf0; }
+.task-summary-dialog h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.task-summary-dialog > header button { width: 36px; height: 36px; border: 1px solid #e5e7eb; border-radius: 50%; background: #fff; color: #5f5f5f; font-size: 22px; }
+.task-summary-dialog > header button:hover { background: #f7f8fa; }
+.task-summary-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 20px 20px; }
+.task-summary-body .task-list { max-height: none; overflow: visible; }
+#taskSummaryNotice { flex-shrink: 0; margin: 12px 20px 0; color: #5f5f5f; font-size: 13px; }
+.task-summary-hints.hidden, .task-summary-pill.hidden { display: none; }

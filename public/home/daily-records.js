@@ -1,3 +1,5 @@
+import { createCardOrder } from './card-order.js';
+
 const TYPE_LABELS = { meeting: "会议纪要", work: "工作记录", idea: "想法随记", other: "其他" };
 
 export function createDailyRecords({
@@ -18,6 +20,7 @@ export function createDailyRecords({
   sendChat,
 }) {
   let searchTimer = null;
+  const order = createCardOrder({ container: el.dailyRecordList, kind: 'records', cardSelector: '.daily-record-card', getDate: () => state.selectedDate, busy: () => state.saving, onNotice: toast });
 
   async function loadDate(date) {
     const requestId = ++state.dayRequest;
@@ -56,6 +59,7 @@ export function createDailyRecords({
   function recordCountForDate(date) { return state.monthCounts.get(date) || 0; }
 
   function renderList(records, searching) {
+    if (searching) order.disable(); else records = order.prepare(records);
     state.displayRecords = records;
     if (!records.length) {
       el.dailyRecordList.innerHTML = emptyState(searching ? "没有找到相关记录" : "当天还没有记录", searching ? "⌕" : "✎");
@@ -81,6 +85,7 @@ export function createDailyRecords({
         ${expanded ? `<article class="daily-record-body markdown-body" data-record-body="${record.id}"></article>` : ""}
       </article>`;
     }).join("");
+    if (!searching) order.decorate(records);
     for (const record of records) {
       if (!state.expandedIds.has(record.id)) continue;
       renderMarkdown(el.dailyRecordList.querySelector(`[data-record-body="${record.id}"]`), record.content, { onNotice: toast });

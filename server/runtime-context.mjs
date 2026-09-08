@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { buildDashboard, buildDayDetails, localDateString, parseWorkTodo } from "../lib/tasks.mjs";
 import { DailyRecordManager } from "../lib/daily-record-manager.mjs";
-import { PiRpcRuntime } from "../lib/pi-rpc.mjs";
+import { PiSdkRuntime } from "../lib/pi-sdk.mjs";
 import { addTaskMarkdown, deleteTaskMarkdown, moveTaskDateMarkdown, mutationError, updateTaskMarkdown } from "../lib/task-writer.mjs";
 import { PiAdmin } from "../lib/pi-admin.mjs";
 import { SkillManager } from "../lib/skill-manager.mjs";
@@ -13,6 +13,8 @@ import { VSkillManager } from "../lib/vskill-manager.mjs";
 import { WorkspaceService } from "../lib/workspace.mjs";
 import { WorkspaceRegistry, samePath } from "../lib/workspace-registry.mjs";
 import { publicErrorMessage } from "./response.mjs";
+import { PromptReceipts } from "./prompt-receipts.mjs";
+import { createBoundedSse } from "./bounded-sse.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -29,9 +31,12 @@ class RuntimeContext {
     this.taskMutationQueue = Promise.resolve();
     this.workspaceSwitchQueue = Promise.resolve();
     this.workspaceSwitching = false;
+    this.switchCandidateRuntime = null;
     this.shuttingDown = false;
     this.shutdownPromise = null;
     this.eventClients = new Set();
+    this.eventStreams = new Map();
+    this.promptReceipts = new PromptReceipts();
     this.activeAuthLoginAbort = null;
     this.authLoginSequence = 0;
     this.turnFiles = { involved: new Set(), modified: new Set() };
@@ -57,11 +62,14 @@ class RuntimeContext {
   attachServer(server) { this.server = server; }
 
   async createRuntimeServices(cwd) {
-    const runtime = new PiRpcRuntime({ cwd, sessionDir: this.config.piSessionDir, agentDir: this.config.piAgentDir, log: console });
+    const runtime = new PiSdkRuntime({ cwd, sessionDir: this.config.piSessionDir, agentDir: this.config.piAgentDir, log: console });
     const admin = new PiAdmin({ agentDir: this.config.piAgentDir, cwd, piRuntime: runtime, log: console });
     const skills = new SkillManager({ agentDir: this.config.piAgentDir, cwd, backupDir: this.config.backupDir, piAdmin: admin, log: console });
     const files = await new WorkspaceService(cwd).initialize();
-    runtime.on("event", (event) => { if (runtime === this.piRuntime) this.broadcastAgentEvent(event); });
+    runtime.on("event", (event) => {
+      if (runtime === this.piRuntime) this.broadcastAgentEvent(event);
+      else if (runtime === this.switchCandidateRuntime && event.type === "extension_ui_request") this.emitAgentEvent(event);
+    });
     return { piRuntime: runtime, piAdmin: admin, skillManager: skills, workspaceService: files };
   }
 
@@ -127,7 +135,10 @@ class RuntimeContext {
       try {
         await previous.piRuntime.close();
         previous.piAdmin.close();
+        if (this.shuttingDown) throw mutationError(503, "工作台正在退出");
         candidate = await this.createRuntimeServices(target.canonicalRoot);
+        this.switchCandidateRuntime = candidate.piRuntime;
+        if (this.shuttingDown) throw mutationError(503, "工作台正在退出");
         const sessions = await this.listActiveSessions(candidate.piRuntime, target);
         const remembered = sessions.find((session) => session.id === target.lastSessionId);
         if (remembered) await candidate.piRuntime.openSession(remembered.path);
@@ -142,7 +153,15 @@ class RuntimeContext {
       } catch (error) {
         candidate?.piAdmin?.close();
         await candidate?.piRuntime?.close().catch(() => {});
+        if (this.shuttingDown) throw error;
+        // A timed-out in-process Agent cannot be killed like the old child.
+        // Never start a rollback Agent while either runtime still owns resources.
+        if (previous.piRuntime.running || candidate?.piRuntime?.running) {
+          if (candidate?.piRuntime?.running) Object.assign(this, candidate);
+          throw mutationError(500, `Pi SDK资源仍未释放，无法安全回滚；请重启工作台。${error.message}`);
+        }
         const rollback = await this.createRuntimeServices(previousWorkspace.canonicalRoot);
+        this.switchCandidateRuntime = rollback.piRuntime;
         let rollbackState = null;
         try {
           if (previousSessionPath && existsSync(previousSessionPath)) rollbackState = await rollback.piRuntime.openSession(previousSessionPath);
@@ -156,7 +175,7 @@ class RuntimeContext {
         if (rollbackState) this.emitAgentEvent({ type: "runtime_ready", state: rollbackState, restored: true });
         if (!error.statusCode) error.statusCode = 500;
         throw error;
-      } finally { this.workspaceSwitching = false; }
+      } finally { this.workspaceSwitching = false; this.switchCandidateRuntime = null; }
     };
     const queued = this.workspaceSwitchQueue.then(operation);
     this.workspaceSwitchQueue = queued.catch(() => {});
@@ -195,11 +214,15 @@ class RuntimeContext {
 
   openAgentEventStream(req, res) {
     res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-    res.write(`data: ${JSON.stringify({ type: "connected", running: this.piRuntime.running, state: this.piRuntime.state, idleTimeoutMs: this.piRuntime.idleTimeoutMs, workspace: this.publicWorkspace(this.activeWorkspace) })}\n\n`);
+    const stream = createBoundedSse(res);
     this.eventClients.add(res);
-    const heartbeat = setInterval(() => { if (!res.destroyed) res.write(": heartbeat\n\n"); }, 30_000);
-    const cleanup = () => { clearInterval(heartbeat); this.eventClients.delete(res); };
+    this.eventStreams.set(res, stream);
+    const heartbeat = setInterval(() => stream.write(": heartbeat\n\n"), 30_000);
+    const cleanup = () => { clearInterval(heartbeat); this.eventClients.delete(res); this.eventStreams.delete(res); stream.close(); };
     req.on("close", cleanup); res.on("close", cleanup);
+    stream.write(`data: ${JSON.stringify({ type: "connected", running: this.piRuntime.running, state: this.piRuntime.state, idleTimeoutMs: this.piRuntime.idleTimeoutMs, workspace: this.publicWorkspace(this.activeWorkspace) })}\n\n`);
+    const interactiveRuntime = this.switchCandidateRuntime || this.piRuntime;
+    for (const event of interactiveRuntime.pendingUiRequests()) stream.write(`data: ${JSON.stringify(event)}\n\n`);
   }
 
   broadcastAgentEvent(event) {
@@ -214,7 +237,8 @@ class RuntimeContext {
   emitAgentEvent(event) {
     const encoded = `data: ${JSON.stringify(event)}\n\n`;
     for (const client of this.eventClients) {
-      if (client.destroyed) this.eventClients.delete(client); else client.write(encoded);
+      if (client.destroyed) { this.eventClients.delete(client); this.eventStreams.delete(client); }
+      else this.eventStreams.get(client)?.write(encoded);
     }
   }
 
@@ -306,7 +330,8 @@ class RuntimeContext {
       this.eventClients.clear();
       this.server?.close(); this.server?.closeIdleConnections?.();
       this.piAdmin.close();
-      await this.piRuntime.close().catch(() => {});
+      const runtimes = new Set([this.piRuntime, this.switchCandidateRuntime].filter(Boolean));
+      await Promise.allSettled([...runtimes].map((runtime) => runtime.close()));
       process.exit(0);
     })();
     setTimeout(() => process.exit(0), 7000).unref();

@@ -1,0 +1,9 @@
+.history-text-search { box-sizing: border-box; width: 100%; margin: 8px 0; padding: 9px 11px; border: 1px solid #d7e2ee; border-radius: 8px; background: #fff; color: #334155; }
+.session-search-results { overflow: auto; min-height: 0; }
+.session-search-status { margin: 8px 4px 12px; font-size: 12px; line-height: 1.6; color: #52677f; }
+.session-search-hit { display: flex; flex-direction: column; gap: 6px; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 12px; border: 1px solid #d7e2ee; border-radius: 8px; text-align: left; background: #fff; color: #334155; cursor: pointer; }
+.session-search-hit:hover { background: #f0f7ff; border-color: #a9c9ed; }
+.session-search-hit strong, .session-search-hit span { overflow-wrap: anywhere; white-space: pre-wrap; }
+.session-search-hit small { color: #64748b; font-size: 11px; }
+.session-search-hit span { line-height: 1.5; font-size: 13px; }
+.session-search-results.hidden { display: none !important; }

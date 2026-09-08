@@ -1,4 +1,4 @@
-import { api, workspacePayload, workspaceUrl } from "./api-client.js?v=1";
+import { api, ApiError, workspacePayload, workspaceUrl } from "./api-client.js?v=1";
 
 export function createAgentClient({
   request = api,
@@ -74,7 +74,7 @@ export function createAgentClient({
   }
 
   async function bootstrap(options = {}) {
-    const data = await request(workspaceUrl("/api/agent/bootstrap", getWorkspaceId()), { cache: "no-store", ...options });
+    const data = await request(workspaceUrl("/api/agent/bootstrap", getWorkspaceId()), { cache: "no-store", timeout: 0, ...options });
     runtime.workspace = data.workspace || runtime.workspace;
     applyAgentState(data.state || {});
     return data;
@@ -92,17 +92,36 @@ export function createAgentClient({
     const result = await request("/api/agent/command", {
       method: "POST",
       body: JSON.stringify(workspacePayload(payload, getWorkspaceId())),
+      timeout: payload.type.startsWith("get_") ? 15000 : 0,
       ...options,
     });
     return result.data;
   }
 
-  async function send(message, { images = [], streamingBehavior, launchFirst = false } = {}) {
+  async function send(message, { images = [], streamingBehavior, launchFirst = false, signal, timeout = 0 } = {}) {
     if (launchFirst) await launch();
-    const payload = { type: "prompt", message };
+    if (signal?.aborted) throw new ApiError("消息尚未发送，请求已取消");
+    const requestId = crypto.randomUUID();
+    const payload = { type: "prompt", message, requestId };
     if (images.length) payload.images = images;
     if (streamingBehavior) payload.streamingBehavior = streamingBehavior;
-    return command(payload);
+    try { return await command(payload, { signal, timeout }); }
+    catch (error) {
+      if (error.status && error.status < 500) throw error; // Definite client-error rejection; 5xx may have lost an ACK.
+      let receipt;
+      try { receipt = await request(`/api/agent/receipt?requestId=${encodeURIComponent(requestId)}`, { cache: "no-store", timeout: 5000 }); }
+      catch { /* Unreachable/expired receipts remain unknown. Never resend. */ }
+      if (receipt?.status === "accepted") return null;
+      if (receipt?.status === "rejected") throw new ApiError(receipt.error || "消息未被受理", { status: 409 });
+      throw Object.assign(new ApiError(receipt?.status === "pending" ? "消息已到达，正在确认受理状态，请勿重复发送" : "暂时无法确认消息是否受理，请同步对话后确认，勿重复发送"), { acceptanceUnknown: true, requestId });
+    }
+  }
+
+  function getSnapshot({ messages = false, since, ...options } = {}) {
+    const query = new URLSearchParams();
+    if (messages) query.set("messages", "1");
+    if (since != null) query.set("since", since);
+    return request(workspaceUrl(`/api/agent/snapshot?${query}`, getWorkspaceId()), { cache: "no-store", timeout: 15000, ...options });
   }
 
   return {
@@ -112,8 +131,9 @@ export function createAgentClient({
     send,
     stop: () => command({ type: "abort" }),
     compact: () => command({ type: "compact" }),
-    getState: () => command({ type: "get_state" }),
-    getMessages: () => command({ type: "get_messages" }),
+    getSnapshot,
+    getState: (options) => command({ type: "get_state" }, options),
+    getMessages: (options) => command({ type: "get_messages" }, options),
     applyAgentState,
     applyEvent,
     state: snapshot,

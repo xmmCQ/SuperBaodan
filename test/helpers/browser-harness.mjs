@@ -27,10 +27,10 @@ export async function freePort() {
   return port;
 }
 
-export async function launchBrowser() {
+export async function launchBrowser({ width, height } = {}) {
   const executable = EDGE_CANDIDATES.find(existsSync);
   if (!executable) throw new Error("未找到Microsoft Edge");
-  const debugPort = 9442 + Math.floor(Math.random() * 50);
+  const debugPort = await freePort();
   const profileParent = process.platform === "win32"
     ? path.join(process.env.LOCALAPPDATA, "Temp")
     : "/mnt/c/Users/niuli2288/AppData/Local/Temp";
@@ -40,32 +40,41 @@ export async function launchBrowser() {
   let stderr = "";
   const child = spawn(executable, [
     "--headless=new", "--disable-gpu", "--disable-background-mode", "--no-first-run", "--disable-extensions",
+    ...(width && height ? [`--window-size=${Math.round(width)},${Math.round(height)}`] : []),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${toWindowsPath(profilePath)}`,
     "about:blank",
   ], { cwd: process.platform === "win32" ? process.env.SystemDrive + "\\" : "/mnt/c", stdio: ["ignore", "ignore", "pipe"] });
   child.stderr.on("data", (chunk) => { stderr += chunk; });
 
-  let target;
-  try { target = await waitForDebugger(debugPort); }
-  catch (error) {
+  let connection;
+  try {
+    const target = await waitForDebugger(debugPort);
+    connection = await connectCdp(target.webSocketDebuggerUrl);
+    await connection.command("Runtime.enable");
+    await connection.command("Page.enable");
+    await connection.command("Network.enable");
+  } catch (error) {
+    connection?.close();
     child.kill("SIGKILL");
     await stopEdgeForProfile(profilePath);
     await profile.cleanup();
     throw new Error(`${error.message}（端口${debugPort}，配置${profilePath}）${stderr.trim() ? `：${stderr.trim().slice(-300)}` : ""}`);
   }
-  const connection = await connectCdp(target.webSocketDebuggerUrl);
-  await connection.command("Runtime.enable");
-  await connection.command("Page.enable");
-  await connection.command("Network.enable");
-
   return {
     issues: connection.issues,
     addInitScript: (source) => connection.command("Page.addScriptToEvaluateOnNewDocument", { source }),
     async navigate(url) {
       connection.issues.length = 0;
-      await connection.command("Page.navigate", { url });
-      await connection.waitFor("document.readyState === 'complete'");
+      const before = connection.navigationVersion();
+      const result = await connection.command("Page.navigate", { url });
+      if (result.errorText) throw new Error(result.errorText);
+      const deadline = Date.now() + 6000;
+      while (connection.navigationVersion() === before) {
+        if (Date.now() > deadline) throw new Error(`页面导航未提交：${url}`);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await connection.waitFor(`document.readyState === 'complete' && location.href === ${JSON.stringify(url)}`);
     },
     evaluate: connection.evaluate,
     waitFor: connection.waitFor,
@@ -86,7 +95,7 @@ async function waitForDebugger(port) {
   const deadline = Date.now() + 6000;
   while (Date.now() < deadline) {
     try {
-      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) })).json();
       const page = targets.find((target) => target.type === "page");
       if (page) return page;
     } catch {}
@@ -101,7 +110,7 @@ async function connectCdp(url) {
     socket.addEventListener("open", resolve, { once: true });
     socket.addEventListener("error", reject, { once: true });
   });
-  let sequence = 0;
+  let sequence = 0, navigation = 0;
   const pending = new Map();
   const issues = [];
   socket.addEventListener("message", ({ data }) => {
@@ -110,10 +119,12 @@ async function connectCdp(url) {
       const operation = pending.get(message.id);
       if (!operation) return;
       pending.delete(message.id);
+      clearTimeout(operation.timer);
       if (message.error) operation.reject(new Error(message.error.message));
       else operation.resolve(message.result);
       return;
     }
+    if ((message.method === "Page.frameNavigated" && !message.params.frame.parentId) || message.method === "Page.navigatedWithinDocument") navigation += 1;
     if (message.method === "Runtime.exceptionThrown") issues.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
     if (message.method === "Runtime.consoleAPICalled" && ["error", "warning"].includes(message.params.type)) {
       issues.push(message.params.args.map((item) => item.value || item.description || "").join(" "));
@@ -121,9 +132,15 @@ async function connectCdp(url) {
     if (message.method === "Network.loadingFailed" && !message.params.canceled) issues.push(message.params.errorText);
   });
 
+  socket.addEventListener("close", () => {
+    for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error("浏览器调试连接已关闭")); }
+    pending.clear();
+  });
   const command = (method, params = {}) => new Promise((resolve, reject) => {
+    if (socket.readyState !== WebSocket.OPEN) { reject(new Error("浏览器调试连接不可用")); return; }
     const id = ++sequence;
-    pending.set(id, { resolve, reject });
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`浏览器命令超时：${method}`)); }, 15000);
+    pending.set(id, { resolve, reject, timer });
     socket.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression) => {
@@ -139,7 +156,7 @@ async function connectCdp(url) {
     }
     throw new Error(`等待页面状态超时：${expression}`);
   };
-  return { command, evaluate, waitFor, issues, close: () => socket.close() };
+  return { command, evaluate, waitFor, issues, navigationVersion: () => navigation, close: () => socket.close() };
 }
 
 async function stopEdgeForProfile(profilePath) {

@@ -60,6 +60,10 @@ function positionTooltip(target = activeTarget) {
   let left = target.classList.contains("tooltip-left")
     ? targetRect.right - tooltipRect.width
     : targetRect.left + (targetRect.width - tooltipRect.width) / 2;
+  if (target.classList.contains("tooltip-side-left")) {
+    left = targetRect.left - tooltipRect.width - TOOLTIP_GAP;
+    top = targetRect.top + (targetRect.height - tooltipRect.height) / 2;
+  }
   left = Math.min(Math.max(TOOLTIP_EDGE, left), innerWidth - tooltipRect.width - TOOLTIP_EDGE);
   top = Math.min(Math.max(TOOLTIP_EDGE, top), innerHeight - tooltipRect.height - TOOLTIP_EDGE);
   tooltip.style.left = `${Math.round(left)}px`;
