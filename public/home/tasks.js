@@ -1,3 +1,5 @@
+import { createCardOrder, taskOrderKey } from './card-order.js';
+
 export function createTasks({
   state,
   elements: el,
@@ -14,6 +16,7 @@ export function createTasks({
   const recurrenceLabels = { day: "每天", week: "每周", month: "每月", year: "每年" };
   const loadDashboard = (...args) => loadDashboardCallback(...args);
   const loadDay = (...args) => loadDayCallback(...args);
+  const order = createCardOrder({ container: el.dayTasks, kind: 'tasks', cardSelector: '.task-card', getDate: () => state.selectedDate, keyForItem: taskOrderKey, busy: () => state.taskSaving, onNotice: toast });
 function renderOverdue(tasks) {
   el.overdueCount.textContent = tasks.length;
   el.overdueCount.classList.toggle("hidden", tasks.length === 0);
@@ -31,6 +34,7 @@ function renderLongTerm(tasks) {
 }
 
 function renderTaskList(container, tasks, emptyText, emptyIcon, metaBuilder, allowDelete = false) {
+  if (container === el.dayTasks) tasks = order.prepare(tasks);
   rememberTasks(tasks);
   if (!tasks.length) {
     container.innerHTML = emptyState(emptyText, emptyIcon);
@@ -39,7 +43,7 @@ function renderTaskList(container, tasks, emptyText, emptyIcon, metaBuilder, all
   container.innerHTML = tasks.map((task) => {
     const moveKind = allowDelete ? taskMoveKind(task, state.selectedDate) : null;
     const moveAttributes = moveKind
-      ? `draggable="true" data-move-kind="${moveKind}" data-move-date="${state.selectedDate}" data-tooltip="拖动到日历日期可改期"`
+      ? `draggable="true" data-move-kind="${moveKind}" data-move-date="${state.selectedDate}" data-tooltip="拖到列表中调整顺序，拖到日历日期可改期"`
       : "";
     return `
       <div class="task-card ${task.checked ? "completed" : ""} ${moveKind ? "task-draggable tooltip-control" : ""}" data-task-id="${task.id}" ${moveAttributes}>
@@ -54,6 +58,7 @@ function renderTaskList(container, tasks, emptyText, emptyIcon, metaBuilder, all
         </div>
       </div>`;
   }).join("");
+  if (container === el.dayTasks) order.decorate(tasks);
 }
 
 function dayTaskMeta(task) {
@@ -92,11 +97,12 @@ function moveKeepsDateRange(task, sourceDate, targetDate) {
 }
 
 function handleTaskDragStart(event) {
-  const card = event.target.closest(".task-card[data-move-kind]");
+  const card = event.target.closest(".task-card");
   if (!card || state.taskSaving) {
     event.preventDefault();
     return;
   }
+  if (!card.dataset.moveKind) return; // Ongoing cards can reorder without a date to move.
   const task = state.taskById.get(card.dataset.taskId);
   if (!task) {
     event.preventDefault();
@@ -292,6 +298,7 @@ async function saveTaskForm(event) {
       body: JSON.stringify(body),
     });
     state.sourceRevision = data.updatedAt;
+    if (editing) { const previous = state.taskById.get(state.editingTaskId); if (previous) order.rename(previous, { ...previous, editableText: body.text }); }
     hideTaskModal();
     await refreshTaskViews();
     toast(editing ? "工作计划已修改并同步" : "工作计划已新增并同步");

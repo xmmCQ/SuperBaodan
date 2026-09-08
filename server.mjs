@@ -9,6 +9,7 @@ const userHome = process.env.USERPROFILE || "C:\\Users\\niuli2288";
 const config = {
   root,
   publicDir: path.join(root, "public"),
+  holidayCacheDir: path.join(dataDir, 'holiday-cache'),
   backupDir: process.env.SUPER_BAODAN_BACKUP_DIR || path.join(dataDir, "backups"),
   workspaceDir: process.env.SUPER_BAODAN_WORKSPACE || path.join(root, "workspace"),
   todoFile: process.env.SUPER_BAODAN_TODO_FILE || path.join(dataDir, "work-todo.md"),

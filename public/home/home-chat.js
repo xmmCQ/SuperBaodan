@@ -1,9 +1,12 @@
+import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
+import { messageBodyText as chatMessageText } from "../core/reply-actions.js";
+
 export function createHomeChat({
   state,
   elements: el,
   api,
   agentClient,
-  sessionService,
+  sessionService, replyActions, directory,
   workspaceSwitcher,
   renderMarkdown,
   toast,
@@ -16,32 +19,55 @@ export function createHomeChat({
   const HOME_ASSISTANT_WORKING_TEXT = "努力搬砖中！";
   const CHAT_BOTTOM_THRESHOLD = 80;
   let stickToChatBottom = true;
+  const historyWindow = createMessageWindow();
+  let restoringHistory = false, previousTop = 0;
   el.chatMessages.addEventListener("scroll", () => {
-    const distance = el.chatMessages.scrollHeight - el.chatMessages.clientHeight - el.chatMessages.scrollTop;
+    const top = el.chatMessages.scrollTop, scrollingUp = top < previousTop;
+    previousTop = top;
+    if (el.chatMessages.dataset?.readingAdjustment || el.chatMessages.dataset?.directoryJump) return;
+    const distance = el.chatMessages.scrollHeight - el.chatMessages.clientHeight - top;
     stickToChatBottom = distance <= CHAT_BOTTOM_THRESHOLD;
+    if (scrollingUp && !restoringHistory) loadEarlierMessages();
   }, { passive: true });
   el.chatMessages.addEventListener("wheel", (event) => {
-    if (event.deltaY < 0) stickToChatBottom = false;
+    if (event.deltaY < 0) { stickToChatBottom = false; loadEarlierMessages(); }
   }, { passive: true });
+
+const finishHistoryRestore = () => afterHistoryRestore(el.chatMessages, (top) => { previousTop = top; restoringHistory = false; });
+function loadEarlierMessages(force = false) {
+  if (restoringHistory) return "pending";
+  if (!historyWindow.hasPrevious()) return "end";
+  if (!force && el.chatMessages.scrollTop > HISTORY_TOP_THRESHOLD) return "idle";
+  restoringHistory = true; stickToChatBottom = false;
+  prependPreviousMessages(historyWindow, el.chatMessages, createHistoryMessage);
+  finishHistoryRestore(); return "loaded";
+}
+function createHistoryMessage(message, index) {
+  const node = createMessage(message.role, chatMessageText(message) || "[图片]");
+  node.dataset.messageIndex = index;
+  if (message.stopReason === "error") node.classList.add("error");
+  replyActions?.attach(node, message);
+  return node;
+}
 async function warmupAgent() {
-  setAgentStatus("正在启动 Windows Pi……", "loading");
+  setAgentStatus("正在准备对话……", "loading");
   try {
     await agentClient.launch();
-    setAgentStatus("Windows Pi 已运行", "ready");
-  } catch {
-    setAgentStatus("Windows Pi 启动失败", "error");
+    setAgentStatus(state.chatBusy ? "正在处理……" : "", "ready");
+  } catch (error) {
+    setAgentStatus("对话准备失败，请重试", "error", error.message);
+    toast(error.message || "对话准备失败，请重试", true);
   }
 }
 
 async function loadAgentStatus() {
   try {
     const data = await api("/api/health", { cache: "no-store" });
-    if (!data.assistantInstalled) setAgentStatus("未安装 Windows Pi", "error");
-    else if (data.assistantState === "busy") setAgentStatus("宝蛋正在处理", "ready");
-    else if (data.assistantState === "idle") setAgentStatus("Windows Pi 已休眠，使用时自动唤醒", "loading");
-    else if (data.assistantRunning) setAgentStatus("Windows Pi 已运行", "ready");
-    else if (data.assistantState === "error") setAgentStatus("Windows Pi 异常退出", "error");
-    else setAgentStatus("Windows Pi 待启动", "loading");
+    if (!data.assistantInstalled) setAgentStatus("缺少助手组件，请安装 Windows Pi", "error");
+    else if (data.assistantState === "error") setAgentStatus("对话暂不可用，请重试", "error");
+    else if (data.assistantState === "busy") setAgentStatus("正在处理……", "ready");
+    else if (data.assistantState === "starting") setAgentStatus("正在准备对话……", "loading");
+    else setAgentStatus("", "ready");
   } catch {
     setAgentStatus("服务连接失败", "error");
   }
@@ -109,16 +135,17 @@ function handleHomeChatEvent(event) {
   } else if (event.type === "runtime_exit") {
     state.chatBusy = agentState.running;
     if (state.liveAssistant?.isConnected) {
-      state.liveAssistant.textContent = "Windows Pi 异常退出";
+      state.liveAssistant.textContent = event.error || "对话连接中断，请重试";
       state.liveAssistant.classList.remove("working");
       state.liveAssistant.classList.add("error");
       state.liveAssistant.removeAttribute("role");
       state.liveAssistant.removeAttribute("aria-label");
-    } else appendMessage("assistant", "Windows Pi 异常退出").classList.add("error");
+    } else appendMessage("assistant", event.error || "对话连接中断，请重试").classList.add("error");
     state.liveAssistant = null;
     setChatControls(false);
+    setAgentStatus("对话暂不可用，请重试", "error", event.error);
   } else if (event.type === "runtime_idle") {
-    setAgentStatus("Windows Pi 已休眠，使用时自动唤醒", "loading");
+    setAgentStatus("", "ready");
   } else if (event.type === "workspace_changed") {
     if (event.renamed) {
       state.workspace = event.workspace;
@@ -135,30 +162,27 @@ function handleHomeChatEvent(event) {
 }
 
 function renderChatMessages(messages, { hideTrailingAssistant = false, forceScroll = true } = {}) {
+  replyActions?.syncContext();
   const shouldFollow = forceScroll || stickToChatBottom;
   const previousScrollTop = el.chatMessages.scrollTop;
   let visible = messages.filter((message) => ["user", "assistant"].includes(message.role));
   if (hideTrailingAssistant && visible.at(-1)?.role === "assistant") visible = visible.slice(0, -1);
-  visible = visible.map((message) => ({ message, text: chatMessageText(message) })).filter((item) => item.text.trim());
+  visible = visible.filter((message) => chatMessageText(message).trim() || (message.role === "user" && message.content?.some?.((part) => part.type === "image")));
+  directory?.update(visible);
   if (!visible.length) {
     renderChatWelcome();
     return;
   }
+  restoringHistory = true;
+  const page = historyWindow.update(visible, { reset: forceScroll });
   el.chatMessages.replaceChildren();
-  visible.forEach(({ message, text }) => {
-    const bubble = appendMessage(message.role, text);
-    if (message.stopReason === "error") bubble.classList.add("error");
-  });
+  const fragment = document.createDocumentFragment();
+  page.messages.forEach((message, index) => fragment.append(createHistoryMessage(message, page.start + index)));
+  el.chatMessages.append(fragment);
   state.liveAssistant = null;
   if (shouldFollow) scrollChat(forceScroll);
   else el.chatMessages.scrollTop = previousScrollTop;
-}
-
-function chatMessageText(message) {
-  if (typeof message.text === "string") return message.text;
-  if (typeof message.content === "string") return message.content;
-  if (!Array.isArray(message.content)) return "";
-  return message.content.filter((part) => part?.type === "text").map((part) => part.text || "").join("");
+  finishHistoryRestore();
 }
 
 function openChatHistory() {
@@ -310,6 +334,7 @@ async function deleteHistorySession(item) {
 
 async function sendChat(message) {
   if (state.chatBusy) return;
+  const quoted = replyActions?.take(message); message = quoted?.message ?? message;
   state.chatBusy = true;
   state.liveAssistant = null;
   state.liveText = "";
@@ -324,9 +349,10 @@ async function sendChat(message) {
     state.liveAssistant?.remove();
     state.liveAssistant = null;
     appendMessage("assistant", error.message).classList.add("error");
-    state.chatBusy = false;
-    setChatControls(false);
-    loadAgentStatus();
+    if (!error.acceptanceUnknown) replyActions?.restore(quoted);
+    state.chatBusy = Boolean(error.acceptanceUnknown);
+    setChatControls(state.chatBusy);
+    if (error.acceptanceUnknown) void syncHomeChatMessages(); else void loadAgentStatus();
   }
 }
 
@@ -365,11 +391,16 @@ async function openAssistantWorkspace() {
   }
 }
 
-function appendMessage(role, text, { forceScroll = false } = {}) {
+function createMessage(role, text) {
   const node = document.createElement("div");
   node.className = `message ${role}`;
   if (role === "assistant") renderMarkdown(node, text, { onNotice: toast });
   else node.textContent = text;
+  return node;
+}
+
+function appendMessage(role, text, { forceScroll = false } = {}) {
+  const node = createMessage(role, text);
   el.chatMessages.appendChild(node);
   scrollChat(forceScroll);
   return node;
@@ -401,6 +432,7 @@ function showHomeAssistantWorking() {
 }
 
 function setChatControls(busy) {
+  setAgentStatus(busy ? "正在处理……" : "", "ready");
   el.sendButton.disabled = false;
   el.sendButton.classList.toggle("icon-primary", !busy);
   el.sendButton.classList.toggle("icon-danger", busy);
@@ -418,6 +450,9 @@ function setChatControls(busy) {
 }
 
 function renderChatWelcome(isNew = false) {
+  directory?.update([]);
+  replyActions?.syncContext();
+  historyWindow.clear();
   el.chatMessages.innerHTML = `
     <div class="welcome-card">
       <strong>${isNew ? "新对话已开始" : "早上好"}</strong>
@@ -432,6 +467,7 @@ function setChatStatus(text) {
 
 function setAgentStatus(text, status, title = "") {
   el.agentDot.className = `assistant-service-dot tooltip-control tooltip-down ${status === "ready" ? "ready" : status === "error" ? "error" : ""}`.trim();
+  el.agentDot.classList.toggle("hidden", !text);
   el.agentDot.setAttribute("aria-label", text);
   el.agentDot.dataset.tooltip = title || text;
 }
@@ -458,5 +494,5 @@ function scrollChat(force = false) {
   function setWorkspace(workspace) { state.workspace = workspace; }
   function workspace() { return state.workspace; }
   function isBusy() { return state.chatBusy; }
-  return { setWorkspace, workspace, isBusy, warmupAgent, loadAgentStatus, loadHomeChatBootstrap, syncHomeChatMessages, handleHomeChatEvent, renderChatMessages, chatMessageText, openChatHistory, closeChatHistory, switchHistoryTab, updateHistoryTabs, loadHistoryList, renderHistoryList, handleHistoryClick, startHistoryRename, handleHistoryRenameSubmit, activateHistorySession, deleteHistorySession, sendChat, newHomeChat, stopHomeChat, openAssistantWorkspace, appendMessage, showHomeAssistantWorking, setChatControls, renderChatWelcome, setChatStatus, setAgentStatus, scheduleHomeWorkspaceReload, autoResizeInput, scrollChat };
+  return { loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToChatBottom = false; }, setWorkspace, workspace, isBusy, warmupAgent, loadAgentStatus, loadHomeChatBootstrap, syncHomeChatMessages, handleHomeChatEvent, renderChatMessages, chatMessageText, openChatHistory, closeChatHistory, switchHistoryTab, updateHistoryTabs, loadHistoryList, renderHistoryList, handleHistoryClick, startHistoryRename, handleHistoryRenameSubmit, activateHistorySession, deleteHistorySession, sendChat, newHomeChat, stopHomeChat, openAssistantWorkspace, appendMessage, showHomeAssistantWorking, setChatControls, renderChatWelcome, setChatStatus, setAgentStatus, scheduleHomeWorkspaceReload, autoResizeInput, scrollChat };
 }

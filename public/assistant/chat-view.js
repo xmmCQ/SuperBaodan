@@ -1,10 +1,12 @@
 import { repairToolOutputEncoding } from "/assistant/text-normalization.js?v=1";
+import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
+import { createResponseFallback } from "../core/response-fallback.js";
 
 export function createChatView({
   state,
   elements: el,
   agentClient,
-  sessionService,
+  sessionService, replyActions, directory, execution,
   command,
   uiDialogs,
   renderMarkdown,
@@ -17,15 +19,41 @@ export function createChatView({
 }) {
   const ASSISTANT_WORKING_TEXT = "努力搬砖中！";
   const MESSAGE_BOTTOM_THRESHOLD = 80;
-  let stickToMessageBottom = true;
+  let stickToMessageBottom = true, scrollEpoch = 0;
+  const historyWindow = createMessageWindow();
+  const responseFallback = createResponseFallback({
+    readSnapshot: (options) => agentClient.getSnapshot(options),
+    lastEventAt: () => state.lastAgentEventAt || 0,
+    applySnapshot: (snapshot) => {
+      updateStateFromAgent(snapshot.state || {});
+      if (Array.isArray(snapshot.messages)) renderMessages(snapshot.messages, { forceScroll: false });
+    },
+  });
+  let restoringHistory = false;
+  let previousTop = 0;
   el.messages.addEventListener("scroll", () => {
-    const distance = el.messages.scrollHeight - el.messages.clientHeight - el.messages.scrollTop;
+    const top = el.messages.scrollTop;
+    const scrollingUp = top < previousTop;
+    previousTop = top;
+    if (el.messages.dataset?.readingAdjustment || el.messages.dataset?.directoryJump) return;
+    const distance = el.messages.scrollHeight - el.messages.clientHeight - top;
     stickToMessageBottom = distance <= MESSAGE_BOTTOM_THRESHOLD;
+    if (scrollingUp && !restoringHistory) loadEarlierMessages();
   }, { passive: true });
   el.messages.addEventListener("wheel", (event) => {
-    if (event.deltaY < 0) stickToMessageBottom = false;
+    if (event.deltaY < 0) { stickToMessageBottom = false; loadEarlierMessages(); }
   }, { passive: true });
   Object.defineProperty(state, "turnFiles", { get: getTurnFiles });
+const finishHistoryRestore = () => afterHistoryRestore(el.messages, (top) => { previousTop = top; restoringHistory = false; });
+function loadEarlierMessages(force = false) {
+  if (restoringHistory) return "pending";
+  if (!historyWindow.hasPrevious()) return "end";
+  if (!force && el.messages.scrollTop > HISTORY_TOP_THRESHOLD) return "idle";
+  restoringHistory = true; stickToMessageBottom = false;
+  prependPreviousMessages(historyWindow, el.messages, (message, index) => createMessageNode(message, { index }), () => execution?.refresh());
+  finishHistoryRestore(); return "loaded";
+}
+
 function createLiveAssistant(message) {
   if (state.live?.node?.isConnected) return;
   const node = createMessageShell("assistant");
@@ -33,6 +61,7 @@ function createLiveAssistant(message) {
   el.messages.append(node);
   const rendered = message?.content?.length ? renderAssistantContent(state.live.bubble, message.content) : 0;
   if (!rendered) state.live.bubble.append(createAssistantStatus("正在思考…", "pending"));
+  execution?.register(node, message || { role: "assistant" }, undefined, { live: true }); execution?.refresh(true);
   scrollBottom();
 }
 
@@ -68,6 +97,9 @@ function scheduleLiveAssistantRender() {
 }
 
 function renderLiveAssistant() {
+  if (execution) execution.change(renderLiveAssistantContent); else renderLiveAssistantContent();
+}
+function renderLiveAssistantContent() {
   const live = state.live;
   if (!live) return;
   live.bubble.replaceChildren();
@@ -89,9 +121,14 @@ function renderLiveAssistant() {
   for (const tool of live.tools.values()) live.bubble.append(createToolCard(tool.name, tool.args));
   appendTurnFilesCard(live.bubble, state.turnFiles);
   if (!live.bubble.childElementCount) live.bubble.append(createAssistantStatus("正在思考…", "pending"));
+  const content = [{ type: "thinking", thinking: live.thinking }, { type: "text", text: live.text }, ...[...live.tools].map(([id, tool]) => ({ type: "toolCall", id, name: tool.name }))];
+  execution?.register(live.node, { ...live.snapshot, role: "assistant", content }, undefined, { live: true }); execution?.refresh(true);
 }
 
 function finalizeMessage(message) {
+  if (execution) execution.change(() => finalizeMessageContent(message)); else finalizeMessageContent(message);
+}
+function finalizeMessageContent(message) {
   if (!message) return;
   if (message.role === "assistant" && state.live?.node) {
     const replacement = createMessageNode(message, { turnFiles: state.turnFiles });
@@ -104,32 +141,47 @@ function finalizeMessage(message) {
   } else {
     el.messages.append(createMessageNode(message));
   }
-  scrollBottom();
+  execution?.refresh(true); scrollBottom();
 }
 
-function renderMessages(messages, { forceScroll = true } = {}) {
+function renderMessages(messages, options = {}) {
+  if (execution && options.forceScroll === false) execution.change(() => renderMessagesContent(messages, options)); else renderMessagesContent(messages, options);
+}
+function renderMessagesContent(messages, { forceScroll = true } = {}) {
+  execution?.setMessages(messages, state.running);
+  directory?.update(messages);
+  replyActions?.syncContext();
   const shouldFollow = forceScroll || stickToMessageBottom;
   const previousScrollTop = el.messages.scrollTop;
+  if (state.live?.renderFrame) cancelAnimationFrame(state.live.renderFrame);
+  state.live = null;
   el.messages.replaceChildren();
   if (!messages.length) {
+    historyWindow.clear();
     const welcome = document.createElement("div");
     welcome.className = "welcome";
     welcome.innerHTML = '<img src="/baodan-assistant.png" alt="宝蛋"><h1>我已就绪</h1><p>来了！我是帮你搬砖的宝蛋，可以在设置里配置模型和skill哦~</p>';
     el.messages.append(welcome);
     return;
   }
+  restoringHistory = true;
+  const page = historyWindow.update(messages, { reset: forceScroll });
   const lastAssistantIndex = messages.findLastIndex((message) => message.role === "assistant");
-  messages.forEach((message, index) => {
-    const turnFiles = index === lastAssistantIndex && state.turnFiles.involved.length ? state.turnFiles : null;
-    el.messages.append(createMessageNode(message, { turnFiles }));
+  const fragment = document.createDocumentFragment();
+  page.messages.forEach((message, index) => {
+    const turnFiles = index + page.start === lastAssistantIndex && state.turnFiles.involved.length ? state.turnFiles : null;
+    fragment.append(createMessageNode(message, { turnFiles, index: page.start + index }));
   });
+  el.messages.append(fragment); execution?.refresh();
   if (shouldFollow) scrollBottom("auto", forceScroll);
   else el.messages.scrollTop = previousScrollTop;
+  finishHistoryRestore();
 }
 
-function createMessageNode(message, { turnFiles = null } = {}) {
+function createMessageNode(message, { turnFiles = null, index } = {}) {
   const role = message.role === "user" ? "user" : "assistant";
   const node = createMessageShell(role);
+  if (index != null) node.dataset.messageIndex = index;
   const bubble = node.querySelector(".bubble");
   if (message.role === "assistant") {
     const rendered = renderAssistantContent(bubble, message.content || []);
@@ -145,6 +197,8 @@ function createMessageNode(message, { turnFiles = null } = {}) {
     bubble.textContent = messageText(message);
   }
   if (message.role === "assistant" && turnFiles) appendTurnFilesCard(bubble, turnFiles);
+  execution?.register(node, message, index);
+  replyActions?.attach(node, message);
   return node;
 }
 
@@ -152,13 +206,12 @@ function appendTurnFilesCard(container, files) {
   if (!files?.involved?.length || container.querySelector(":scope > .turn-files-card")) return;
   const card = document.createElement("div");
   card.className = "turn-files-card";
-  const modified = new Set(files.modified || []);
   const label = document.createElement("div");
-  label.textContent = `本轮涉及文件 ${files.involved.length} 个 · 本轮修改文件 ${modified.size} 个`;
+  label.textContent = `本轮涉及文件 ${files.involved.length} 个`;
   card.append(label);
   for (const file of files.involved) {
     const button = document.createElement("button");
-    button.textContent = `${modified.has(file) ? "✎ " : ""}${file}`;
+    button.textContent = `${execution?.isConfirmedFile(file) ? "已确认修改 · " : ""}${file}`;
     button.addEventListener("click", () => { setWorkspaceOpen(true); void previewWorkspaceFile(file); });
     card.append(button);
   }
@@ -252,8 +305,9 @@ function createToolCard(name, args = "") {
 }
 
 async function sendPrompt() {
-  const message = el.promptInput.value.trim();
-  if (!message && !state.images.length) return;
+  const instruction = el.promptInput.value.trim();
+  if (!instruction && !state.images.length) return;
+  const quoted = replyActions?.take(instruction), message = quoted?.message ?? instruction;
   el.promptInput.value = "";
   resizePrompt();
   const user = { role: "user", content: message || "[图片]" };
@@ -274,6 +328,8 @@ async function sendPrompt() {
       streamingBehavior: wasRunning ? "followUp" : undefined,
     });
   } catch (error) {
+    if (error.acceptanceUnknown) { showNotice(error.message, true); return; }
+    replyActions?.restore(quoted);
     stopResponseFallback();
     if (!wasRunning) {
       state.running = false;
@@ -285,16 +341,19 @@ async function sendPrompt() {
 }
 
 async function compactSession() {
+  if (el.compactButton.disabled) return;
+  el.compactButton.disabled = true;
+  el.compactButton.setAttribute("aria-busy", "true");
+  el.compactButton.setAttribute("aria-label", "正在压缩上下文");
+  el.compactButton.dataset.tooltip = "正在压缩上下文……";
   try { showNotice("正在压缩上下文……"); await agentClient.compact(); }
   catch (error) { showError(error); }
-}
-
-async function showStats() {
-  try {
-    const [stats, stateInfo] = await Promise.all([command({ type: "get_session_stats" }), command({ type: "get_state" })]);
-    el.statsContent.textContent = JSON.stringify({ ...stats, state: stateInfo }, null, 2);
-    el.statsDialog.showModal();
-  } catch (error) { showError(error); }
+  finally {
+    el.compactButton.disabled = false;
+    el.compactButton.removeAttribute("aria-busy");
+    el.compactButton.setAttribute("aria-label", "压缩上下文");
+    el.compactButton.dataset.tooltip = "压缩上下文";
+  }
 }
 
 async function syncMessagesFromAgent() {
@@ -304,26 +363,9 @@ async function syncMessagesFromAgent() {
   } catch (error) { console.warn("同步消息失败", error); }
 }
 
-function startResponseFallback() {
-  stopResponseFallback();
-  state.responsePoll = setInterval(async () => {
-    if (Date.now() - state.lastAgentEventAt < 1800) return;
-    try {
-      const [agentState, messages] = await Promise.all([
-        command({ type: "get_state" }),
-        command({ type: "get_messages" }),
-      ]);
-      if (Array.isArray(messages?.messages)) renderMessages(messages.messages, { forceScroll: false });
-      updateStateFromAgent(agentState || {});
-      if (!agentState?.isStreaming) stopResponseFallback();
-    } catch {}
-  }, 1500);
-}
+function startResponseFallback() { responseFallback.start(); }
 
-function stopResponseFallback() {
-  if (state.responsePoll) clearInterval(state.responsePoll);
-  state.responsePoll = null;
-}
+function stopResponseFallback() { responseFallback.stop(); }
 
 async function addImages() {
   const files = [...el.imageInput.files];
@@ -373,6 +415,8 @@ async function handleExtensionUi(request) {
 }
 
 function clearWorkspaceDraft() {
+  replyActions?.clear();
+  stopResponseFallback();
   el.promptInput.value = "";
   resizePrompt();
   clearImages();
@@ -399,6 +443,7 @@ function updateToolStatus() {
 function setRuntime(text, status = "") {
   el.runtimeText.textContent = text;
   el.runtimeDot.className = status;
+  el.runtimeText.closest(".runtime-state").classList.toggle("hidden", !text);
 }
 
 function resizePrompt() { el.promptInput.style.height = "auto"; el.promptInput.style.height = `${Math.min(el.promptInput.scrollHeight, 180)}px`; }
@@ -406,8 +451,9 @@ function resizePrompt() { el.promptInput.style.height = "auto"; el.promptInput.s
 function scrollBottom(behavior = "auto", force = false) {
   if (force) stickToMessageBottom = true;
   if (!force && !stickToMessageBottom) return;
+  const epoch = scrollEpoch;
   requestAnimationFrame(() => {
-    if (!force && !stickToMessageBottom) return;
+    if (epoch !== scrollEpoch || (!force && !stickToMessageBottom)) return;
     el.messages.scrollTo({ top: el.messages.scrollHeight, behavior });
   });
 }
@@ -419,5 +465,5 @@ function scrollBottom(behavior = "auto", force = false) {
   function toolStarted(id, name) { state.activeTools.set(id, displayToolName(name || "tool")); updateToolStatus(); }
   function toolEnded(id) { state.activeTools.delete(id); updateToolStatus(); }
   function imageCount() { return state.images.length; }
-  return { isRunning, isStreaming, setRuntimeState, setLastAgentEventAt, settle, toolStarted, toolEnded, imageCount, createLiveAssistant, applyDelta, scheduleLiveAssistantRender, renderLiveAssistant, finalizeMessage, renderMessages, createMessageNode, appendTurnFilesCard, createMessageShell, renderAssistantContent, createAssistantFallback, createAssistantStatus, displayToolName, createToolCard, sendPrompt, compactSession, showStats, syncMessagesFromAgent, startResponseFallback, stopResponseFallback, addImages, renderAttachments, clearImages, readFileAsDataUrl, handleExtensionUi, clearWorkspaceDraft, messageText, repairToolOutputEncoding, updateControls, updateToolStatus, setRuntime, resizePrompt, scrollBottom };
+  return { loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToMessageBottom = false; scrollEpoch += 1; }, isRunning, isStreaming, setRuntimeState, setLastAgentEventAt, settle, toolStarted, toolEnded, imageCount, createLiveAssistant, applyDelta, scheduleLiveAssistantRender, renderLiveAssistant, finalizeMessage, renderMessages, createMessageNode, appendTurnFilesCard, createMessageShell, renderAssistantContent, createAssistantFallback, createAssistantStatus, displayToolName, createToolCard, sendPrompt, compactSession, syncMessagesFromAgent, startResponseFallback, stopResponseFallback, addImages, renderAttachments, clearImages, readFileAsDataUrl, handleExtensionUi, clearWorkspaceDraft, messageText, repairToolOutputEncoding, updateControls, updateToolStatus, setRuntime, resizePrompt, scrollBottom };
 }

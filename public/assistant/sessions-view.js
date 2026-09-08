@@ -1,3 +1,5 @@
+import { createSessionSearch } from "../core/session-search.js";
+
 export function createSessionsView({
   state,
   elements: el,
@@ -5,11 +7,17 @@ export function createSessionsView({
   uiDialogs,
   setIconBusy,
   getRunning,
+  getWorkspaceId,
   loadBootstrap,
   showNotice,
   showError
 }) {
   Object.defineProperty(state, "running", { get: getRunning });
+  const searchView = createSessionSearch({
+    input: el.sessionSearch, results: el.sessionSearchResults, defaultList: el.sessionList,
+    search: sessionService.search, getWorkspaceId,
+    onOpen: (hit) => activateSession({ path: hit.sessionPath }),
+  });
 async function refreshSessions() {
   setIconBusy(el.refreshSessions, true);
   try {
@@ -36,11 +44,11 @@ async function activateSession(session) {
 
 function renderSessions(sessions) {
   state.sessions = sessions;
-  const query = (el.sessionSearch.value || "").trim().toLocaleLowerCase();
-  const visible = sessions.filter((session) => `${session.title} ${session.firstMessage || ""}`.toLocaleLowerCase().includes(query));
+  const visible = sessions;
+  searchView.refresh();
   el.sessionList.replaceChildren();
   if (!visible.length) {
-    const empty = document.createElement("div"); empty.className = "muted"; empty.textContent = query ? "没有匹配的历史对话" : "暂无历史对话"; el.sessionList.append(empty); return;
+    const empty = document.createElement("div"); empty.className = "muted"; empty.textContent = "暂无历史对话"; el.sessionList.append(empty); return;
   }
   for (const session of visible) {
     const row = document.createElement("div");
@@ -87,5 +95,5 @@ async function deleteSession(session) {
   } catch (error) { showError(error); }
 }
   function setCurrentSession(id) { state.currentSessionId = id || null; }
-  return { setCurrentSession, refreshSessions, newSession, activateSession, renderSessions, renameSession, deleteSession };
+  return { clearSearch: searchView.reset, setCurrentSession, refreshSessions, newSession, activateSession, renderSessions, renameSession, deleteSession };
 }

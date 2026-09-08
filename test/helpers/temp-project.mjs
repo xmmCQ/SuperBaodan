@@ -1,10 +1,12 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 export async function createTempProject(prefix = "super-baodan-test-", { baseDirectory = os.tmpdir() } = {}) {
   await mkdir(baseDirectory, { recursive: true });
-  const root = await mkdtemp(path.join(baseDirectory, prefix));
+  // Windows TEMP may use an 8.3 username; normalize the fixture root so path
+  // safety tests do not mistake that alias for a directory symlink.
+  const root = await realpath(await mkdtemp(path.join(baseDirectory, prefix)));
   let cleaned = false;
 
   const resolve = (...parts) => path.join(root, ...parts);

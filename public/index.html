@@ -4,11 +4,17 @@
   <meta charset="UTF-8">
   <title>超级宝蛋</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=5">
-  <link rel="stylesheet" href="/styles.css?v=38">
+  <link rel="stylesheet" href="/styles.css?v=40">
   <link rel="stylesheet" href="/ui-dialog.css?v=5">
   <link rel="stylesheet" href="/icon-actions.css?v=4">
-  <link rel="stylesheet" href="/workspace-switcher.css?v=3">
+  <link rel="stylesheet" href="/workspace-switcher.css?v=4">
   <link rel="stylesheet" href="/markdown.css?v=1">
+  <link rel="stylesheet" href="/core/session-search.css">
+  <link rel="stylesheet" href="/core/reading-settings.css">
+  <link rel="stylesheet" href="/core/reply-actions.css">
+  <link rel="stylesheet" href="/core/conversation-directory.css">
+  <link rel="stylesheet" href="/home/card-order.css">
+  <link rel="stylesheet" href="/home/holiday-marks.css">
 </head>
 <body aria-busy="true">
   <div class="app-loading-screen" role="status" aria-live="polite"><i aria-hidden="true"></i><span>工作台加载中……</span></div>
@@ -128,12 +134,13 @@
             <span class="chat-kicker">工作助手</span>
             <div class="assistant-title-row">
               <h2>宝蛋</h2>
-              <span class="assistant-service-dot tooltip-control tooltip-down" id="agentDot" role="status" aria-label="宝蛋正在启动" data-tooltip="宝蛋正在启动"></span>
+              <span class="assistant-service-dot tooltip-control tooltip-down" id="agentDot" role="status" aria-label="正在准备对话……" data-tooltip="正在准备对话……"></span>
             </div>
           </div>
           <button class="icon-action icon-accent tooltip-down" id="expandAssistantButton" type="button" aria-label="展开助手" data-tooltip="展开助手"><svg aria-hidden="true"><use href="/icons.svg#maximize-2"></use></svg></button>
           <button class="button soft chat-vskill-button tooltip-control tooltip-down" id="openVSkillButton" type="button" aria-label="管理VSkill" data-tooltip="管理VSkill">V</button>
           <button class="icon-button icon-action chat-history-button tooltip-down" id="openChatHistoryButton" type="button" aria-label="历史对话" data-tooltip="历史对话"><svg aria-hidden="true"><use href="/icons.svg#history"></use></svg></button>
+          <button class="icon-action tooltip-down" id="directoryButton" type="button" aria-label="展开对话目录" data-tooltip="对话目录"><svg aria-hidden="true"><use href="/icons.svg?v=6#list-tree"></use></svg></button>
           <button class="icon-button icon-action icon-accent chat-new tooltip-down" id="newChatButton" type="button" aria-label="新建对话" data-tooltip="新建对话"><svg aria-hidden="true"><use href="/icons.svg#plus"></use></svg></button>
         </div>
         <section class="chat-history-drawer hidden" id="chatHistoryDrawer" aria-label="历史对话管理">
@@ -150,7 +157,9 @@
           <div class="history-tabs" role="tablist">
             <button class="active" id="historySessionsTab" type="button" role="tab">全部对话</button>
           </div>
+          <input class="history-text-search" id="historySearchInput" type="search" maxlength="200" placeholder="搜索当前工作区正文" aria-label="搜索当前工作区的用户和助手文本" autocomplete="off">
           <div class="history-list" id="chatHistoryList"></div>
+          <div class="history-list session-search-results hidden" id="historySearchResults"></div>
         </section>
         <section class="vskill-drawer hidden" id="vskillDrawer" aria-label="VSkill管理">
           <div class="history-drawer-header">
@@ -182,6 +191,7 @@
         </div>
         <div class="vskill-quickbar hidden" id="vskillQuickbar" aria-label="VSkill快捷指令"></div>
         <div class="chat-status hidden" id="chatStatus"></div>
+        <section id="replyQuote" class="reply-quote hidden" aria-label="引用原文"></section>
         <form class="chat-composer" id="chatForm">
           <textarea id="chatInput" rows="1" placeholder="输入工作指令或直接提问……"></textarea>
           <button class="icon-action icon-primary" type="submit" id="sendButton" aria-label="发送" data-tooltip="发送"><svg aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg></button>

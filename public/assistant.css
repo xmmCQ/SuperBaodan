@@ -245,6 +245,7 @@ textarea {
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   padding: 8px 18px;
   background: rgba(255,255,255,.9);
@@ -662,12 +663,6 @@ dialog::backdrop {
   font: inherit;
   color: #657a91;
   border-radius: 50%;
-}
-
-#statsContent {
-  white-space: pre-wrap;
-  max-height: 60vh;
-  overflow: auto;
 }
 
 .model-picker {

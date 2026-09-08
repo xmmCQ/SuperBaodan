@@ -1,0 +1,7 @@
+.holiday-badge { position: absolute; top: 3px; right: 2px; width: 12px; height: 14px; display: grid; place-items: center; border-radius: 3px; font-size: 9px; line-height: 1; font-weight: 600; pointer-events: none; }
+.holiday-rest { color: #b84950; background: #fcebed; }
+.holiday-work { color: #526276; background: #e8edf3; }
+.calendar-day.outside .holiday-badge { opacity: .6; }
+.holiday-footer { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 9px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.holiday-status { color: #98631e; }
+.holiday-status[hidden], .holiday-footer[hidden] { display: none; }

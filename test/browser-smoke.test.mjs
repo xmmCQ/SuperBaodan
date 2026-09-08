@@ -9,7 +9,15 @@ test("六条浏览器主链路使用临时数据和独立端口", { timeout: 20_
   const browser = await launchBrowser();
   const base = `http://127.0.0.1:${fixture.port}`;
   t.after(async () => { await browser.close(); await fixture.close(); });
-  await browser.addInitScript(`for (const name of ['confirm','prompt','alert']) window[name] = () => { throw new Error('禁止调用原生弹窗：' + name); };`);
+  await browser.addInitScript(`
+    // The fixture uses 2026-09-04; do not let the real clock select another day.
+    const NativeDate = Date;
+    window.Date = class extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : ['2026-09-04T12:00:00'])); }
+      static now() { return new NativeDate('2026-09-04T12:00:00').getTime(); }
+    };
+    for (const name of ['confirm','prompt','alert']) window[name] = () => { throw new Error('禁止调用原生弹窗：' + name); };
+  `);
 
   await t.test("首页完成加载并隐藏loading层", async () => {
     await browser.navigate(`${base}/?smoke=home`);
@@ -79,7 +87,8 @@ test("六条浏览器主链路使用临时数据和独立端口", { timeout: 20_
   await t.test("助手bootstrap、SSE事件和消息恢复", async () => {
     await browser.navigate(`${base}/assistant.html?smoke=agent`);
     await browser.waitFor("document.querySelector('#modelPickerButton')?.textContent.includes('GPT Test') && document.querySelector('#messages')?.innerText.includes('已恢复的历史回复')");
-    assert.match(await browser.evaluate("runtimeText.textContent"), /已就绪|已连接/);
+    assert.equal(await browser.evaluate("runtimeText.textContent"), "");
+    assert.equal(await browser.evaluate("runtimeText.closest('.runtime-state').classList.contains('hidden')"), true);
     await browser.evaluate(`promptInput.value='测试SSE'; sendButton.click()`);
     await browser.waitFor("document.querySelector('#messages')?.innerText.includes('冒烟回复')");
     await browser.navigate(`${base}/assistant.html?smoke=recovery`);

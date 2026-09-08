@@ -6,9 +6,9 @@ export function registerSystemRoutes(router) {
     const { piRuntime, piAdmin, activeWorkspace, config } = context;
     json(res, 200, {
       ok: true,
-      runtime: "windows-node-rpc",
+      runtime: "windows-node-sdk",
       sourceAvailable: existsSync(config.todoFile),
-      assistantInstalled: Boolean(piRuntime.findCliFile()),
+      assistantInstalled: Boolean(piRuntime.findSdkEntry()),
       assistantRunning: piRuntime.running,
       assistantState: piRuntime.state,
       assistantIdleTimeoutMs: piRuntime.idleTimeoutMs,

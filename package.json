@@ -8,7 +8,8 @@
     "start": "node launcher.mjs",
     "server": "node server.mjs",
     "test": "node --test test/*.test.mjs",
-    "test:smoke": "node --test test/browser-smoke.test.mjs"
+    "test:smoke": "node --test test/browser-smoke.test.mjs",
+    "test:sdk": "node --input-type=module -e \"process.env.SUPER_BAODAN_TEST_SDK='1'; await import('./test/pi-sdk-integration.test.mjs')\""
   },
   "engines": {
     "node": ">=22.19.0"

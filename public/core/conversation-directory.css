@@ -1,0 +1,18 @@
+.conversation-directory { position: fixed; z-index: 70; width: 300px; max-width: calc(100vw - 16px); padding: 10px; border: 1px solid #d0dfee; border-radius: 12px; background: #fff; color: #334155; box-shadow: 0 10px 35px #20375426; }
+.conversation-directory.hidden { display: none !important; }
+.conversation-directory header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+.conversation-directory header strong { margin-right: auto; }
+.conversation-directory header button { border: 0; border-radius: 6px; padding: 5px; background: #eff5fc; color: #315f91; font-size: 12px; cursor: pointer; }
+.conversation-directory-list { max-height: min(55vh, 480px); overflow: auto; overscroll-behavior: contain; }
+.directory-turn { border-bottom: 1px solid #edf1f6; padding: 5px 0; }
+.conversation-directory-list button { display: block; width: 100%; box-sizing: border-box; padding: 7px 9px; border: 0; border-radius: 6px; background: transparent; text-align: left; overflow-wrap: anywhere; color: #40566f; cursor: pointer; line-height: 1.45; }
+.directory-question { font-size: 13px; font-weight: 600; }
+.conversation-directory-list .directory-question.is-current { color: #205eab; background: #e8f1ff; box-shadow: inset 3px 0 #438df8; }
+.directory-question.is-current::after { content: '当前'; display: inline-block; margin-left: 6px; padding: 1px 4px; font-size: 10px; border-radius: 4px; background: #d4e6ff; }
+.conversation-directory-list .directory-heading { font-size: 12px; padding-left: 18px; }
+.conversation-directory-list .directory-heading.level-2 { padding-left: 29px; color: #64748b; }
+.conversation-directory-list button:hover, .conversation-directory-list button:focus-visible { background: #f0f6ff; }
+.conversation-directory button:focus-visible { outline: 2px solid #8ab3ed; outline-offset: -2px; }
+.conversation-directory-list > p { font-size: 12px; color: #64748b; padding: 12px 4px; }
+#directoryButton { font-size: 12px; }
+.chat-header #directoryButton { width: 30px; min-width: 30px; padding: 0; }

@@ -1,0 +1,17 @@
+.reply-enabled { position: relative; }
+.app-ready .reply-enabled, .assistant-page .reply-enabled { visibility: visible; }
+.app-loading .reply-actions { visibility: hidden; }
+.reply-actions { position: absolute; right: 8px; bottom: -14px; z-index: 2; display: flex; gap: 2px; padding: 2px; border: 1px solid #d7e2ee; border-radius: 7px; background: #fff; box-shadow: 0 2px 7px #20375412; visibility: visible; opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity .12s ease; }
+.chat-messages > .reply-enabled.markdown-body > :nth-last-child(2) { margin-bottom: 0 !important; }
+.reply-enabled:hover > .reply-actions, .reply-enabled:focus-within > .reply-actions { opacity: 1; pointer-events: auto; }
+.reply-actions button { min-height: 24px; padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; color: #52677f; cursor: pointer; font-family: inherit; font-size: 12px; line-height: 1.5; }
+.reply-actions button:hover, .reply-actions button:focus-visible { background: #edf4ff; color: #246fca; }
+.reply-actions button:focus-visible { outline: 2px solid #76a5eb; outline-offset: 1px; }
+.reply-action-feedback { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.reply-selection-action { position: fixed; z-index: 100; max-width: 232px; padding: 8px 12px; border: 1px solid #b8cfee; border-radius: 8px; background: #fff; color: #245c9e; box-shadow: 0 4px 18px #20375426; font-size: 13px; cursor: pointer; }
+.reply-quote { box-sizing: border-box; min-width: 0; max-width: 950px; margin: 0 auto 8px; padding: 9px 12px; border-left: 3px solid #76a5eb; border-radius: 7px; background: #edf4fc; color: #40566f; }
+.chat-panel > .reply-quote { width: calc(100% - 24px); margin: 6px 12px; }
+.reply-quote-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.reply-quote-header button { flex: 0 0 auto; padding: 0 5px; border: 0; background: transparent; color: #52677f; font-size: 20px; cursor: pointer; }
+.reply-quote-text { max-height: 104px; overflow: auto; margin: 6px 0 0; padding: 0; border: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+.reply-quote.hidden, .reply-selection-action.hidden { display: none !important; }

@@ -19,7 +19,10 @@ class ScrollBox {
 
 const homeSource = await readFile(new URL("../public/home/home-chat.js", import.meta.url), "utf8");
 const assistantSource = await readFile(new URL("../public/assistant/chat-view.js", import.meta.url), "utf8");
-const assistantModuleSource = assistantSource.replace(/^import .*$/m, "const repairToolOutputEncoding = (value) => value;");
+const assistantModuleSource = assistantSource
+  .replace(/^import .*$/m, "const repairToolOutputEncoding = (value) => value;")
+  .replace('"../core/chat-lazy-load.js"', JSON.stringify(new URL("../public/core/chat-lazy-load.js", import.meta.url).href))
+  .replace('"../core/response-fallback.js"', JSON.stringify(new URL("../public/core/response-fallback.js", import.meta.url).href));
 const { createChatView } = await import(`data:text/javascript;base64,${Buffer.from(assistantModuleSource).toString("base64")}`);
 
 test("首页对话在用户上翻后暂停跟随，回到底部后恢复", () => {
@@ -67,7 +70,7 @@ test("流式同步保留阅读位置，发送和首次加载允许强制跟随",
   assert.match(homeSource, /appendMessage\("user", message, \{ forceScroll: true \}\)/);
   assert.match(homeSource, /else el\.chatMessages\.scrollTop = previousScrollTop/);
   assert.match(assistantSource, /renderMessages\(data\.messages, \{ forceScroll: false \}\)/);
-  assert.match(assistantSource, /renderMessages\(messages\.messages, \{ forceScroll: false \}\)/);
+  assert.match(assistantSource, /renderMessages\(snapshot\.messages, \{ forceScroll: false \}\)/);
   assert.match(assistantSource, /scrollBottom\("auto", true\)/);
   assert.match(assistantSource, /else el\.messages\.scrollTop = previousScrollTop/);
 });

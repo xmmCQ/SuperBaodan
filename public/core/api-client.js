@@ -9,7 +9,7 @@ export class ApiError extends Error {
 
 export async function api(path, options = {}) {
   const {
-    timeout = 0,
+    timeout = ["GET", "HEAD"].includes((options.method || "GET").toUpperCase()) ? 15000 : 0,
     signal,
     headers: incomingHeaders,
     ...fetchOptions

@@ -12,6 +12,10 @@ export function createSessionService({
     return data.sessions || [];
   }
 
+  function search(query, options = {}) {
+    return request(workspaceUrl(`/api/sessions/search?q=${encodeURIComponent(query)}`, getWorkspaceId()), { cache: "no-store", ...options });
+  }
+
   function create(options = {}) {
     return request("/api/agent/new", {
       method: "POST",
@@ -50,5 +54,5 @@ export function createSessionService({
     return { state: state || {}, messages: result?.messages || [] };
   }
 
-  return { list, create, activate, rename, remove, syncCurrent };
+  return { list, search, create, activate, rename, remove, syncCurrent };
 }

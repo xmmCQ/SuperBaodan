@@ -1,0 +1,8 @@
+.day-list .card-order-draggable { cursor: grab; }
+.day-list .card-order-draggable:active { cursor: grabbing; }
+.day-list .card-order-draggable:focus-visible { outline: 2px solid #7aa6df; outline-offset: -2px; }
+.day-list .card-order-draggable .daily-record-main { cursor: grab; }
+.day-list .card-order-dragging { opacity: .45; }
+.day-list .card-order-before { box-shadow: 0 -3px 0 #438df8; }
+.day-list .card-order-after { box-shadow: 0 3px 0 #438df8; }
+.card-order-live { position: fixed; left: 0; top: 0; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
