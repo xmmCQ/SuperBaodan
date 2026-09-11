@@ -12,6 +12,11 @@ test('软件菜单与管理界面增删改、排序、启用和启动，刷新�
   const open = async () => { await browser.navigate(url); await browser.waitFor("document.documentElement.classList.contains('app-ready')"); await browser.evaluate("openAppsButton.click();document.querySelector('[data-manage-apps]').click()"); await browser.waitFor('workAppsDialog.open'); };
   await open();
   assert.equal(await browser.evaluate("getComputedStyle(workAppsDialog).borderRadius"), '24px');
+  assert.equal(await browser.evaluate("getComputedStyle(workAppsDialog.querySelector('.work-app-row')).backgroundColor"), 'rgba(255, 255, 255, 0.22)');
+  assert.equal(await browser.evaluate("getComputedStyle(workAppsDialog.querySelector('[data-path]')).backgroundColor"), 'rgba(255, 255, 255, 0.92)');
+  for (const selector of ['form', 'fieldset', '.work-app-list', '.modal-actions', '.work-app-notice']) {
+    assert.equal(await browser.evaluate(`getComputedStyle(workAppsDialog.querySelector(${JSON.stringify(selector)})).backgroundColor`), 'rgba(0, 0, 0, 0)');
+  }
   await browser.evaluate("workAppsDialog.querySelector('[data-add]').click()");
   await browser.evaluate(`(()=>{const row=workAppsDialog.querySelector('.work-app-list').lastElementChild;row.querySelector('[data-name]').value='新软件';row.querySelector('[data-path]').value='D:/Apps/New.exe';row.querySelector('[data-up]').click();workAppsDialog.querySelectorAll('[data-enabled]')[1].checked=false;})()`);
   await browser.evaluate("workAppsDialog.querySelector('[data-run]').click()");

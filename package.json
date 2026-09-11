@@ -1,9 +1,9 @@
 {
   "name": "super-baodan-workbench",
-  "version": "2.0.0",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
-  "description": "参考 pi-web 架构自研的 Windows Pi 工作台",
+  "description": "集成日历、待办、每日记录和智能助手的 Windows 工作台",
   "scripts": {
     "start": "node launcher.mjs",
     "server": "node server.mjs",

@@ -1,0 +1,35 @@
+/* Compact settings controls without shrinking the dialog or other surfaces. */
+#settingsDialog { font-size: 13px; line-height: 1.5; }
+#settingsDialog :is(button,input,select,textarea) { font-size: 13px; }
+#settingsDialog > .dialog-head > b { font-size: 16px; }
+#settingsDialog :is(h3,.skill-detail-heading h3) { font-size: 17px; line-height: 1.4; }
+#settingsDialog h4 { font-size: 14px; }
+#settingsDialog :is(.settings-scope-note,.form-hint,.skill-field>label,.field-grid label,.skill-editor label,.skill-cli-ok,.skill-update-status) { font-size: 12px; }
+#settingsDialog :is(.skill-badge,.provider-common-badge,.skill-group-title) { font-size: 11px; }
+#settingsDialog :is(.settings-tabs button,.provider-card button,.config-toolbar button,.config-actions button,.dialog-actions button,.skills-toolbar button,.skills-detail button):not(.icon-action):not(.skill-list-icon):not(.skill-list-select) {
+  min-height: 32px;
+  padding: 6px 10px;
+  line-height: 1.4;
+}
+#settingsDialog .settings-tabs button { padding: 7px 11px; }
+/* Override the shared icon utility's fixed 36px !important dimensions. */
+#settingsDialog .icon-action { width: 32px !important; min-width: 32px !important; height: 32px !important; min-height: 32px !important; flex: 0 0 32px; padding: 0; }
+#settingsDialog .icon-action svg { width: 16px; height: 16px; }
+#settingsDialog :is(.provider-search-row input,.config-toolbar select,.field-grid input,.field-grid select,.skills-sidebar>input,.skill-editor input,.skill-editor select,.skill-market-search input,.skill-market-actions select):not([type=checkbox]):not([type=radio]) {
+  min-height: 34px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  line-height: 1.5;
+}
+#settingsDialog :is(.field-grid textarea,.skill-editor textarea) { padding: 7px 9px; line-height: 1.6; }
+#settingsDialog .provider-more summary { min-height: 36px; padding: 8px 12px; }
+#settingsDialog .skills-detail { padding: 16px; }
+#settingsDialog .skill-field { padding: 7px 0; }
+#settingsDialog .skill-invocation-toggle { font-size: 12px; }
+/* Reserve space for diagnostics instead of clipping them below the skill list. */
+#settingsDialog .skills-tab.active { display: flex; flex-direction: column; min-height: 0; }
+#settingsDialog .skills-toolbar { flex: none; }
+#settingsDialog .skills-layout { flex: 1; height: auto; min-height: 0; }
+#settingsDialog .skill-diagnostics { flex: none; max-height: 180px; overflow: auto; }
+#settingsDialog .skill-diagnostics summary { cursor: pointer; font-size: 12px; }
+#settingsDialog .skill-diagnostic-row { overflow-wrap: anywhere; }

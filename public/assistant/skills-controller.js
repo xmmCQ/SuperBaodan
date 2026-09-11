@@ -1,3 +1,5 @@
+import { createSkillGroups } from './skill-groups.js';
+
 export function createSkillsController({
   state,
   elements: el,
@@ -7,13 +9,20 @@ export function createSkillsController({
   markdownBodyWithoutFrontmatter,
   showNotice,
   showError,
-  showSettingsToast
+  showSettingsToast,
+  getWorkspaceId = () => null
 }) {
+const createGroup = createSkillGroups();
+let loadSequence = 0, listedWorkspaceId = null;
 async function loadSkills({ preserveSelection = false } = {}) {
   const previous = preserveSelection ? state.selectedSkillId : null;
+  const sequence = ++loadSequence, workspaceId = getWorkspaceId();
+  const current = () => sequence === loadSequence && workspaceId === getWorkspaceId();
   el.skillsList.innerHTML = '<div class="muted">正在读取……</div>';
   try {
     const data = await api("/api/skills");
+    if (!current()) return;
+    listedWorkspaceId = workspaceId;
     state.skills = data.skills || [];
     state.skillDiagnostics = data.diagnostics || [];
     state.skillCliAvailable = Boolean(data.cliAvailable);
@@ -21,6 +30,7 @@ async function loadSkills({ preserveSelection = false } = {}) {
     state.skillAdding = false;
     renderSkills();
   } catch (error) {
+    if (!current()) return;
     el.skillsList.textContent = `读取失败：${error.message}`;
     showSettingsToast(error.message, "error");
   }
@@ -48,18 +58,27 @@ function renderSkillsList() {
   for (const [scope, label] of groups) {
     const members = filtered.filter((skill) => skill.scope === scope);
     if (!members.length) continue;
-    const title = document.createElement("div"); title.className = "skill-group-title"; title.textContent = `${label} · ${members.length}`; el.skillsList.append(title);
+    const group = createGroup(scope, label, members.length, Boolean(query)); el.skillsList.append(group);
     for (const skill of members) {
-      const row = document.createElement("button"); row.className = `skill-list-item${skill.id === state.selectedSkillId && !state.skillAdding ? " active" : ""}`;
+      const row = document.createElement('div'); row.className = `skill-list-item${skill.id === state.selectedSkillId && !state.skillAdding ? " active" : ""}`;
+      const select = skillButton('', () => {} , 'skill-list-select');
       const line = document.createElement("span"); line.className = "skill-list-name"; line.textContent = skill.name;
       const status = document.createElement("i");
       const update = skill.install ? state.skillUpdates[skillUpdateKey(skill.install)] : null;
       status.textContent = update?.state === "update-available" ? "↑" : skill.disableModelInvocation ? "○" : "●";
       status.className = update?.state === "update-available" ? "skill-update-dot" : skill.disableModelInvocation ? "skill-off-dot" : "skill-on-dot";
       const desc = document.createElement("small"); desc.textContent = skill.description || "无描述";
-      row.append(line, status, desc);
+      select.append(line, status, desc);
+      const actions = document.createElement('span'); actions.className = 'skill-list-actions';
+      if (skill.writable || skill.install) {
+        const remove = skillIcon(skill.install ? '卸载 Skill' : '删除 Skill', 'trash-2', () => skill.install ? uninstallSkill(skill) : deleteCustomSkill(skill));
+        remove.dataset.action = 'delete-skill'; remove.disabled = state.skillBusy || Boolean(skill.install && !state.skillCliAvailable); actions.append(remove);
+      }
+      const open = skillIcon('在文件资源管理器中打开目录', 'folder', () => openSkillFolder(skill));
+      open.dataset.action = 'open-skill-directory'; open.disabled = state.skillBusy; actions.append(open);
+      row.append(select, actions);
       row.addEventListener("click", () => { state.selectedSkillId = skill.id; state.skillAdding = false; state.skillEditorRaw = false; renderSkills(); });
-      el.skillsList.append(row);
+      group.append(row);
     }
   }
   if (!filtered.length) { const empty = document.createElement("div"); empty.className = "muted skill-empty"; empty.textContent = query ? "没有匹配的 Skill" : "暂无 Skill"; el.skillsList.append(empty); }
@@ -81,11 +100,13 @@ function renderSkillDetail() {
   titleWrap.append(title, badges);
   heading.append(titleWrap);
   if (skill.scope !== "other") {
-    const toggle = document.createElement("label"); toggle.className = "skill-invocation-toggle";
+    const toggle = document.createElement("label"); toggle.className = "skill-invocation-toggle tooltip-control tooltip-down";
+    toggle.dataset.tooltip = "关闭后不再自动选用，仍可手动指定使用。";
     const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.checked = !skill.disableModelInvocation; checkbox.disabled = state.skillBusy;
     checkbox.addEventListener("change", () => toggleSkillInvocation(skill, checkbox));
     const text = document.createElement("span"); text.textContent = "允许调用";
-    toggle.append(checkbox, text); heading.append(toggle);
+    const controls = document.createElement('div'); controls.className = 'skill-detail-controls';
+    toggle.append(checkbox, text); controls.append(toggle); heading.append(controls);
   }
   el.skillsDetail.append(heading);
   appendSkillField("描述", skill.description || "无", el.skillsDetail);
@@ -107,7 +128,6 @@ function renderSkillDetail() {
     for (const file of skill.auxiliaryFiles) { const item = document.createElement("li"); item.textContent = file; list.append(item); }
     field.append(list); el.skillsDetail.append(field);
   }
-  const invocationNote = document.createElement("p"); invocationNote.className = "muted skill-invocation-note"; invocationNote.textContent = "关闭自动调用后，模型提示词中将隐藏此 Skill，但仍可手动调用。"; el.skillsDetail.append(invocationNote);
 }
 
 function renderManagedSkillActions(skill) {
@@ -117,7 +137,6 @@ function renderManagedSkillActions(skill) {
   check.disabled = state.skillBusy || !state.skillCliAvailable || !skill.install.canCheckForUpdates;
   box.append(check);
   if (update?.state === "update-available") box.append(skillButton("更新", () => updateSkill(skill), "primary"));
-  const uninstall = skillButton("卸载", () => uninstallSkill(skill), "danger-lite"); uninstall.disabled = state.skillBusy || !state.skillCliAvailable; box.append(uninstall);
   const status = document.createElement("span"); status.className = `skill-update-status ${update?.state || ""}`;
   status.textContent = update ? skillUpdateLabel(update) : skill.install.canCheckForUpdates ? "尚未检查更新" : "暂不支持自动检查";
   box.append(status); el.skillsDetail.append(box);
@@ -137,10 +156,13 @@ function renderCustomSkillEditor(skill) {
     const body = createExpandableSkillField({ label: "指令正文", editorTitle: "编辑指令正文", id: "skillEditBody", value: skill.body || "", className: "skill-body-editor", monospace: true, spellcheck: false, saveLabel: "保存 Skill", markdownPreview: true });
     form.append(name, description, body);
   }
-  const actions = document.createElement("div"); actions.className = "skill-form-actions";
+  const actions = document.createElement('div'); actions.className = 'skill-heading-actions';
   const save = skillButton("保存 Skill", () => saveCustomSkill(skill), "primary"); save.disabled = state.skillBusy;
-  const remove = skillButton("删除", () => deleteCustomSkill(skill), "danger-lite"); remove.disabled = state.skillBusy;
-  actions.append(remove, save); form.append(actions); el.skillsDetail.append(form);
+  save.dataset.action = 'save-skill';
+  const transfer = skillButton(skill.scope === 'global' ? '移入当前项目' : '提升为全局', () => transferSkill(skill));
+  transfer.dataset.action = 'transfer-skill'; transfer.disabled = state.skillBusy;
+  transfer.title = skill.scope === 'global' ? '转为项目专用，其他项目将不再使用这份技能' : '转为全局可用';
+  actions.append(transfer, save); el.skillsDetail.querySelector('.skill-detail-controls').append(actions); el.skillsDetail.append(form);
 }
 
 function renderSkillAddPanel() {
@@ -266,6 +288,16 @@ async function deleteCustomSkill(skill) {
   await runSkillMutation(() => api("/api/skills/custom", { method: "DELETE", body: JSON.stringify({ name: skill.name, scope: skill.scope }) }), "删除成功");
 }
 
+async function transferSkill(skill) {
+  if (state.skillBusy) return;
+  if (!listedWorkspaceId || listedWorkspaceId !== getWorkspaceId()) return showSettingsToast('工作区已变化，请刷新技能列表后重试', 'error');
+  const value = id => el.skillsDetail.querySelector(id)?.value;
+  const dirty = state.skillEditorRaw ? value('#skillRawContent') !== skill.content
+    : value('#skillEditDescription') !== skill.description || value('#skillEditBody') !== (skill.body || '');
+  if (dirty) return showSettingsToast('请先保存编辑内容，再转换 Skill 范围', 'error');
+  await runSkillMutation(() => api('/api/skills/transfer', { method: 'POST', body: JSON.stringify({ id: skill.id, name: skill.name, scope: skill.scope, revision: skill.revision, workspaceId: listedWorkspaceId }) }), skill.scope === 'global' ? '已移入当前项目' : '已提升为全局');
+}
+
 async function checkSkillUpdates(skill = null) {
   if (state.skillBusy) return;
   state.skillBusy = true;
@@ -283,12 +315,14 @@ async function checkSkillUpdates(skill = null) {
 
 async function runSkillMutation(operation, successMessage, preserveId = null) {
   if (state.skillBusy) return;
+  const workspaceId = getWorkspaceId();
   state.skillBusy = true; renderSkills();
   try {
     const result = await operation();
-    showSettingsToast(result?.unchanged ? "未修改" : successMessage, result?.unchanged ? "unchanged" : "success");
-    state.selectedSkillId = preserveId;
-    await loadSkills({ preserveSelection: Boolean(preserveId) });
+    if (workspaceId !== getWorkspaceId()) return;
+    showSettingsToast(result?.warning || (result?.unchanged ? "未修改" : successMessage), result?.warning ? 'error' : result?.unchanged ? "unchanged" : "success");
+    state.selectedSkillId = result?.skillId || preserveId;
+    await loadSkills({ preserveSelection: Boolean(state.selectedSkillId) });
   } catch (error) { showSettingsToast(error.message, "error"); showError(error); }
   finally { state.skillBusy = false; if (state.skills) renderSkills(); }
 }
@@ -342,6 +376,19 @@ function createExpandableSkillField({ label, editorTitle, id, value = "", rows =
 function createSkillField(label) { const field = document.createElement("div"); field.className = "skill-field"; const title = document.createElement("label"); title.textContent = label; field.append(title); return field; }
 
 function appendSkillField(label, value, container, className = "") { const field = createSkillField(label); const content = document.createElement("div"); content.className = className; content.textContent = value; field.append(content); container.append(field); }
+
+function skillIcon(label, icon, handler) {
+  const button = skillButton('', event => { event.stopPropagation(); void handler(); }, 'skill-list-icon');
+  button.setAttribute('aria-label', label); button.title = label;
+  button.innerHTML = `<svg aria-hidden="true"><use href="/icons.svg#${icon}"></use></svg>`;
+  return button;
+}
+
+async function openSkillFolder(skill) {
+  if (!listedWorkspaceId || listedWorkspaceId !== getWorkspaceId()) return showSettingsToast('工作区已变化，请刷新技能列表后重试', 'error');
+  try { await api('/api/skills/open-directory', { method: 'POST', body: JSON.stringify({ id: skill.id, workspaceId: listedWorkspaceId }) }); }
+  catch (error) { showSettingsToast(error.message, 'error'); }
+}
 
 function skillBadge(text, kind = "") { const badge = document.createElement("span"); badge.className = `skill-badge ${kind}`.trim(); badge.textContent = text; return badge; }
 

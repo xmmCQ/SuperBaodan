@@ -90,7 +90,7 @@ auth = createAuthController({
 });
 skills = createSkillsController({
   state: state.skills, elements: el, api, uiDialogs, renderMarkdown, markdownBodyWithoutFrontmatter,
-  showNotice, showError, showSettingsToast,
+  showNotice, showError, showSettingsToast, getWorkspaceId: currentWorkspaceId,
 });
 projectPrompt = createProjectPrompt({ mount: el.projectPromptTab, api, getWorkspace: () => workspace?.workspace(), uiDialogs });
 settings = createSettingsDialog({

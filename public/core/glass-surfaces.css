@@ -1,0 +1,54 @@
+:root {
+  --glass-bg: rgba(255,255,255,.35);
+  --glass-edge: rgba(255,255,255,.7);
+  --glass-large-shadow: 0 16px 48px rgba(28,38,48,.12), inset 0 1px 0 rgba(255,255,255,.85);
+  --glass-small-shadow: 0 8px 28px rgba(28,38,48,.10), inset 0 1px 0 rgba(255,255,255,.85);
+  --glass-shade: rgba(10,10,10,.08);
+}
+/* Approved frosted surface, restricted to the explicit overlay whitelist. */
+html:root body [data-glass-surface][data-glass-surface] {
+  background: #fff;
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-large-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html:root body [data-glass-surface="small"][data-glass-surface] { box-shadow: var(--glass-small-shadow); }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html:root body [data-glass-surface][data-glass-surface] {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(20px) saturate(125%);
+    backdrop-filter: blur(20px) saturate(125%);
+  }
+}
+html:root body [data-glass-shade]::backdrop,
+html:root body .modal-backdrop[data-glass-shade] {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html:root body [data-glass-shade="active"]::backdrop,
+html:root body .modal-backdrop[data-glass-shade="active"] { background: var(--glass-shade); }
+/* Translucent chrome; preserve input/editor backgrounds and semantic states. */
+html:root body [data-glass-surface] > header,
+html:root body [data-glass-surface] :is(.dialog-head,.ui-dialog-head,.workspace-switcher-head,.history-drawer-header,.modal-heading,.ui-dialog-actions,.dialog-actions,.modal-actions,.workspace-switcher-toolbar,.workspace-picker-footer) {
+  background-color: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.5);
+}
+html:root body [data-glass-surface] .task-card { background: rgba(255,255,255,.92); }
+#taskSummaryDialog .task-summary-body { background: transparent; }
+#taskSummaryDialog #taskSummaryNotice { color: #334155; }
+@media (forced-colors: active) {
+  html:root body [data-glass-surface][data-glass-surface] {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+    box-shadow: none;
+    outline: 1px solid CanvasText;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  html:root body [data-glass-surface] > header,
+  html:root body [data-glass-surface] :is(.dialog-head,.ui-dialog-head,.workspace-switcher-head,.history-drawer-header,.modal-heading,.ui-dialog-actions,.dialog-actions,.modal-actions,.workspace-switcher-toolbar,.workspace-picker-footer,.task-card) { background: Canvas; border-color: CanvasText; }
+  #taskSummaryDialog #taskSummaryNotice { color: CanvasText; }
+}

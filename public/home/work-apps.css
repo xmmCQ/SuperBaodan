@@ -22,3 +22,17 @@
 .work-app-add { margin-top: 12px; }
 .work-app-notice { min-height: 16px; margin: 10px 2px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .work-app-dialog button:disabled { opacity: .4; cursor: default; }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .work-app-row { background: rgba(255,255,255,.22); border-color: rgba(255,255,255,.5); }
+  .work-app-row input:not([type=checkbox]) { background: rgba(255,255,255,.92); }
+}
+/* Leave the glass outer surface visible between cards and below the list. */
+html:root body #workAppsDialog form,
+html:root body #workAppsDialog fieldset,
+html:root body #workAppsDialog .work-app-list,
+html:root body #workAppsDialog .modal-actions,
+html:root body #workAppsDialog .work-app-notice { background: transparent; }
+@media (forced-colors: active) {
+  .work-app-row { background: Canvas; border-color: CanvasText; }
+  .work-app-row input:not([type=checkbox]) { background: Canvas; color: CanvasText; }
+}
