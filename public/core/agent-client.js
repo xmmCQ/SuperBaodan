@@ -1,4 +1,5 @@
 import { api, ApiError, workspacePayload, workspaceUrl } from "./api-client.js?v=1";
+import { validatePromptPayload } from './prompt-images.js';
 
 export function createAgentClient({
   request = api,
@@ -12,6 +13,16 @@ export function createAgentClient({
     sessionFile: null,
     workspace: null,
   };
+
+  let bootstrapSequence = 0, workspaceEpoch = 0;
+  const bootstrapTickets = new WeakMap();
+  const staleBootstrap = () => Object.assign(new Error('初始化响应已过期'), { staleResponse: true });
+  function bootstrapCurrent(data) {
+    const ticket = bootstrapTickets.get(data);
+    if (!ticket || ticket.sequence !== bootstrapSequence || ticket.epoch !== workspaceEpoch) return false;
+    const current = getWorkspaceId() || runtime.workspace?.id || null;
+    return (!ticket.workspaceId || ticket.workspaceId === current) && (!current || !data.workspace?.id || data.workspace.id === current);
+  }
 
   function snapshot() {
     return { ...runtime };
@@ -29,6 +40,7 @@ export function createAgentClient({
   }
 
   function applyEvent(event = {}) {
+    if ((event.type === 'workspace_changed' && !event.renamed) || (event.type === 'connected' && event.workspace?.id && runtime.workspace?.id && event.workspace.id !== runtime.workspace.id)) workspaceEpoch += 1;
     switch (event.type) {
       case "connected":
         runtime.runtimeState = event.state || (event.running ? "running" : "stopped");
@@ -74,7 +86,15 @@ export function createAgentClient({
   }
 
   async function bootstrap(options = {}) {
-    const data = await request(workspaceUrl("/api/agent/bootstrap", getWorkspaceId()), { cache: "no-store", timeout: 0, ...options });
+    const ticket = { sequence: ++bootstrapSequence, workspaceId: getWorkspaceId() || runtime.workspace?.id || null, epoch: workspaceEpoch };
+    let data;
+    try { data = await request(workspaceUrl("/api/agent/bootstrap", ticket.workspaceId), { cache: "no-store", timeout: 0, ...options }); }
+    catch (error) {
+      if (ticket.sequence !== bootstrapSequence || ticket.epoch !== workspaceEpoch || (ticket.workspaceId && ticket.workspaceId !== (getWorkspaceId() || runtime.workspace?.id || null))) throw staleBootstrap();
+      throw error;
+    }
+    bootstrapTickets.set(data, ticket);
+    if (!bootstrapCurrent(data)) throw staleBootstrap();
     runtime.workspace = data.workspace || runtime.workspace;
     applyAgentState(data.state || {});
     return data;
@@ -99,12 +119,16 @@ export function createAgentClient({
   }
 
   async function send(message, { images = [], streamingBehavior, launchFirst = false, signal, timeout = 0 } = {}) {
+    const workspaceId = getWorkspaceId();
+    validatePromptPayload({ message, images });
     if (launchFirst) await launch();
+    if (workspaceId !== getWorkspaceId()) throw new ApiError('工作区已变化，消息未发送', { status: 409 });
     if (signal?.aborted) throw new ApiError("消息尚未发送，请求已取消");
     const requestId = crypto.randomUUID();
     const payload = { type: "prompt", message, requestId };
     if (images.length) payload.images = images;
     if (streamingBehavior) payload.streamingBehavior = streamingBehavior;
+    validatePromptPayload(workspacePayload(payload, workspaceId));
     try { return await command(payload, { signal, timeout }); }
     catch (error) {
       if (error.status && error.status < 500) throw error; // Definite client-error rejection; 5xx may have lost an ACK.
@@ -126,6 +150,7 @@ export function createAgentClient({
 
   return {
     bootstrap,
+    bootstrapCurrent,
     launch,
     command,
     send,

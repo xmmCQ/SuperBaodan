@@ -1,3 +1,5 @@
+import { createReadError } from './read-error.js';
+
 export function createDashboard({
   state,
   elements: el,
@@ -34,6 +36,7 @@ async function loadDashboard(showToast = false) {
     else if (showToast) toast("已读取最新工作待办");
   } catch (error) {
     if (requestId !== state.dashboardRequest) return;
+    if (!state.dashboard) el.calendarGrid.replaceChildren(createReadError(error.message, () => loadDashboard()));
     toast(error.message, true);
   }
 }
@@ -60,7 +63,7 @@ async function loadDay(date) {
   } catch (error) {
     if (requestId === state.dayRequest) {
       setTaskCount(0);
-      el.dayTasks.innerHTML = emptyState(error.message, "!");
+      el.dayTasks.replaceChildren(createReadError(error.message, () => loadDay(state.selectedDate)));
     }
   }
 }

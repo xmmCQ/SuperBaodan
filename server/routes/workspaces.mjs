@@ -1,9 +1,23 @@
 import { readFile } from "node:fs/promises";
+import { captureWorkspace, withWorkspaceSnapshot } from '../workspace-operations.mjs';
+import { readProjectPrompt } from '../../lib/project-prompt.mjs';
 import { mutationError } from "../../lib/task-writer.mjs";
 import { MAX_BINARY_PREVIEW_BYTES, MAX_UPLOAD_FILE_BYTES } from "../../lib/workspace.mjs";
 import { assertLocalRequest, assertSecureBinaryMutation, assertSecureJsonMutation, json, readBinaryBody, readJsonBody } from "../response.mjs";
 
 export function registerWorkspaceRoutes(router) {
+  router.get('/api/workspace/project-prompt', async (req, res, url, _match, context) => {
+    assertLocalRequest(req, context.config);
+    const workspaceId = url.searchParams.get('workspaceId');
+    if (!workspaceId) throw mutationError(400, '缺少项目标识');
+    context.assertActiveWorkspace(workspaceId);
+    const root = context.workspaceService.rootReal;
+    json(res, 200, { ...await readProjectPrompt(root), workspaceId });
+  });
+  router.put('/api/workspace/project-prompt', async (req, res, _url, _match, context) => {
+    assertSecureJsonMutation(req, context.config);
+    json(res, 200, await context.saveProjectPrompt(await readJsonBody(req)));
+  });
   router.get("/api/workspaces", async (req, res, _url, _match, context) => {
     assertLocalRequest(req, context.config); json(res, 200, await context.publicWorkspaceList());
   });
@@ -34,13 +48,18 @@ export function registerWorkspaceRoutes(router) {
 
   router.post("/api/workspace/upload/check", async (req, res, _url, _match, context) => {
     assertSecureJsonMutation(req, context.config);
-    const body = await readJsonBody(req); context.assertActiveWorkspace(body.workspaceId);
-    json(res, 200, await context.workspaceService.checkUpload(body.directory || "", body.files));
+    const snapshot = captureWorkspace(context);
+    const body = await readJsonBody(req);
+    const result = await withWorkspaceSnapshot(context, snapshot, body.workspaceId, ({ files }) => files.checkUpload(body.directory || '', body.files));
+    json(res, 200, result);
   });
   router.post("/api/workspace/upload", async (req, res, url, _match, context) => {
-    assertSecureBinaryMutation(req, context.config); context.assertActiveWorkspace(url.searchParams.get("workspaceId"));
+    assertSecureBinaryMutation(req, context.config);
+    const workspaceId = url.searchParams.get('workspaceId');
+    const snapshot = captureWorkspace(context, workspaceId);
+    // Do not hold the workspace queue while receiving a potentially slow upload.
     const content = await readBinaryBody(req, MAX_UPLOAD_FILE_BYTES);
-    const uploaded = await context.workspaceService.upload(url.searchParams.get("directory") || "", url.searchParams.get("name") || "", content, { overwrite: url.searchParams.get("overwrite") === "true" });
+    const uploaded = await withWorkspaceSnapshot(context, snapshot, workspaceId, ({ files }) => files.upload(url.searchParams.get("directory") || "", url.searchParams.get("name") || "", content, { overwrite: url.searchParams.get("overwrite") === "true" }));
     json(res, 201, { ok: true, uploaded });
   });
   router.get("/api/workspace/tree", async (req, res, url, _match, context) => {

@@ -1,5 +1,6 @@
 import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
 import { messageBodyText as chatMessageText } from "../core/reply-actions.js";
+import { createBootstrapLoader } from '../core/bootstrap-loader.js';
 
 export function createHomeChat({
   state,
@@ -63,7 +64,7 @@ async function warmupAgent() {
 async function loadAgentStatus() {
   try {
     const data = await api("/api/health", { cache: "no-store" });
-    if (!data.assistantInstalled) setAgentStatus("缺少助手组件，请安装 Windows Pi", "error");
+    if (!data.assistantInstalled) setAgentStatus("缺少助手组件，请检查安装配置", "error");
     else if (data.assistantState === "error") setAgentStatus("对话暂不可用，请重试", "error");
     else if (data.assistantState === "busy") setAgentStatus("正在处理……", "ready");
     else if (data.assistantState === "starting") setAgentStatus("正在准备对话……", "loading");
@@ -73,9 +74,7 @@ async function loadAgentStatus() {
   }
 }
 
-async function loadHomeChatBootstrap() {
-  try {
-    const data = await agentClient.bootstrap();
+const loadHomeChatBootstrap = createBootstrapLoader({ client: agentClient, getWorkspaceId: () => workspaceSwitcher.active()?.id, apply(data) {
     state.workspace = data.workspace || state.workspace;
     if (data.workspaces) workspaceSwitcher.sync(data.workspaces);
     if (data.workspaces?.warning && !sessionStorage.getItem("super-baodan-workspace-warning")) {
@@ -88,11 +87,8 @@ async function loadHomeChatBootstrap() {
     renderChatMessages(data.messages || [], { hideTrailingAssistant: state.chatBusy });
     if (state.chatBusy) showHomeAssistantWorking();
     setChatControls(state.chatBusy);
-  } catch (error) {
-    console.warn(error);
-    renderChatWelcome();
-  }
-}
+  }, onError(error) { console.warn(error); renderChatWelcome(); }
+});
 
 async function syncHomeChatMessages() {
   try {

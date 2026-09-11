@@ -1,4 +1,6 @@
 import { assertAllowedAgentCommand } from "../../lib/agent-commands.mjs";
+import { MAX_PROMPT_JSON_BYTES, validatePromptPayload } from '../../public/core/prompt-images.js';
+import { mutationError } from '../../lib/task-writer.mjs';
 import { assertSecureJsonMutation, json, readJsonBody } from "../response.mjs";
 
 export function registerAgentRoutes(router) {
@@ -44,7 +46,9 @@ export function registerAgentRoutes(router) {
 
   router.post("/api/agent/command", async (req, res, _url, _match, context) => {
     assertSecureJsonMutation(req, context.config);
-    const body = assertAllowedAgentCommand(await readJsonBody(req));
+    const body = assertAllowedAgentCommand(await readJsonBody(req, MAX_PROMPT_JSON_BYTES));
+    if (body.type === 'prompt') validatePromptPayload(body);
+    else if (Buffer.byteLength(JSON.stringify(body), 'utf8') > 1024 * 1024) throw mutationError(413, '请求内容过大');
     const uiResponse = body.type === "extension_ui_response";
     if (!uiResponse && (context.workspaceSwitching || context.piAdmin.maintenanceActive)) {
       return json(res, 409, { error: "工作区或配置正在切换，请稍后重试" });

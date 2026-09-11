@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { WorkApps } from '../lib/work-apps.mjs';
+import { saveProjectPrompt } from '../lib/project-prompt.mjs';
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -15,6 +17,7 @@ import { WorkspaceRegistry, samePath } from "../lib/workspace-registry.mjs";
 import { publicErrorMessage } from "./response.mjs";
 import { PromptReceipts } from "./prompt-receipts.mjs";
 import { createBoundedSse } from "./bounded-sse.mjs";
+import { enqueueWorkspaceOperation } from './workspace-operations.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -27,9 +30,11 @@ export async function createRuntimeContext(config) {
 class RuntimeContext {
   constructor(config) {
     this.config = config;
+    this.workApps = new WorkApps({ filePath: config.workAppsFile || path.join(path.dirname(config.todoFile), 'work-apps.json'), launch: apps => this.launchWorkApps(apps) });
     this.lastGoodSource = null;
     this.taskMutationQueue = Promise.resolve();
     this.workspaceSwitchQueue = Promise.resolve();
+    this.workspaceEpoch = 0;
     this.workspaceSwitching = false;
     this.switchCandidateRuntime = null;
     this.shuttingDown = false;
@@ -97,8 +102,8 @@ class RuntimeContext {
     return (await runtime.listSessions()).filter((session) => session.cwd && samePath(session.cwd, workspace.canonicalRoot));
   }
 
-  async assertSessionInActiveWorkspace(sessionPath) {
-    const session = (await this.listActiveSessions()).find((entry) => samePath(entry.path, sessionPath));
+  async assertSessionInActiveWorkspace(sessionPath, runtime = this.piRuntime, workspace = this.activeWorkspace) {
+    const session = (await this.listActiveSessions(runtime, workspace)).find((entry) => samePath(entry.path, sessionPath));
     if (!session) throw mutationError(403, "该会话不属于当前工作区");
     return session;
   }
@@ -122,6 +127,19 @@ class RuntimeContext {
     this.activeWorkspace = this.workspaceRegistry.active();
   }
 
+  saveProjectPrompt(body) {
+    const operation = async () => {
+      if (!body.workspaceId) throw mutationError(400, '缺少项目标识');
+      this.assertActiveWorkspace(body.workspaceId);
+      if (this.shuttingDown || this.piAdmin.maintenanceActive) throw mutationError(409, '工作台正在维护，请稍后重试');
+      const root = this.workspaceService.rootReal;
+      return this.piRuntime.updateProjectPrompt(async () => ({
+        ...await saveProjectPrompt(root, body, this.config.backupDir), workspaceId: body.workspaceId,
+      }));
+    };
+    return enqueueWorkspaceOperation(this, operation);
+  }
+
   activateWorkspace(id) {
     const operation = async () => {
       if (id === this.activeWorkspace.id) return { workspace: this.publicWorkspace(this.activeWorkspace), sessions: await this.listActiveSessions() };
@@ -132,6 +150,7 @@ class RuntimeContext {
       const previous = { piRuntime: this.piRuntime, piAdmin: this.piAdmin };
       let candidate = null;
       this.workspaceSwitching = true;
+      this.workspaceEpoch += 1;
       try {
         await previous.piRuntime.close();
         previous.piAdmin.close();
@@ -177,9 +196,7 @@ class RuntimeContext {
         throw error;
       } finally { this.workspaceSwitching = false; this.switchCandidateRuntime = null; }
     };
-    const queued = this.workspaceSwitchQueue.then(operation);
-    this.workspaceSwitchQueue = queued.catch(() => {});
-    return queued;
+    return enqueueWorkspaceOperation(this, operation);
   }
 
   async safeAgentCommand(command, fallback) {
@@ -315,11 +332,16 @@ class RuntimeContext {
     await Promise.all(files.slice(30).map((name) => unlink(path.join(this.config.backupDir, name)).catch(() => {})));
   }
 
-  async openWorkApps() {
-    const { stdout, stderr } = await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", this.config.appScript], { timeout: 30_000, maxBuffer: 1024 * 1024, encoding: "utf8", windowsHide: true });
-    const output = stdout.trim();
-    const start = output.lastIndexOf("[");
-    return { results: JSON.parse(start >= 0 ? output.slice(start) : output), warning: stderr.trim() || null };
+  openWorkApps() { return this.workApps.run(); }
+
+  async launchWorkApps(apps) {
+    const encoded = Buffer.from(JSON.stringify(apps), 'utf8').toString('base64');
+    const execution = execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", this.config.appScript, '-ReadAppsFromStdin'], { timeout: 30_000, maxBuffer: 1024 * 1024, encoding: "utf8", windowsHide: true });
+    execution.child.stdin.on('error', () => {});
+    execution.child.stdin.end(encoded);
+    const { stdout, stderr } = await execution;
+    const results = JSON.parse(stdout.replace(/^\uFEFF/, '').trim());
+    return { results: Array.isArray(results) ? results : [results], warning: stderr.trim() || null };
   }
 
   shutdown() {

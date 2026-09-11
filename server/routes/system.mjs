@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { json, readJsonBody } from "../response.mjs";
+import { json, readJsonBody, assertLocalRequest, assertSecureJsonMutation } from "../response.mjs";
 
 export function registerSystemRoutes(router) {
   router.get("/api/health", async (_req, res, _url, _match, context) => {
@@ -34,8 +34,22 @@ export function registerSystemRoutes(router) {
     setTimeout(() => void context.shutdown(), 150).unref();
   });
 
-  router.post("/api/apps/open-all", async (_req, res, _url, _match, context) => {
-    try { json(res, 200, await context.openWorkApps()); }
-    catch (error) { json(res, 500, { error: `启动工作软件失败：${error.message}` }); }
+  router.get('/api/apps/config', async (req, res, _url, _match, context) => {
+    assertLocalRequest(req, context.config);
+    json(res, 200, await context.workApps.read());
+  });
+  router.put('/api/apps/config', async (req, res, _url, _match, context) => {
+    assertSecureJsonMutation(req, context.config);
+    json(res, 200, await context.workApps.save(await readJsonBody(req)));
+  });
+  router.post('/api/apps/open', async (req, res, _url, _match, context) => {
+    assertSecureJsonMutation(req, context.config);
+    const body = await readJsonBody(req);
+    if (typeof body.id !== 'string' || !/^[\w-]{1,64}$/.test(body.id) || typeof body.revision !== 'string' || !body.revision) return json(res, 400, { error: '缺少软件标识或配置版本' });
+    json(res, 200, await context.workApps.run(body.id, body.revision));
+  });
+  router.post("/api/apps/open-all", async (req, res, _url, _match, context) => {
+    assertLocalRequest(req, context.config);
+    json(res, 200, await context.openWorkApps());
   });
 }

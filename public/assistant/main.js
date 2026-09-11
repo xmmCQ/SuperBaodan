@@ -18,6 +18,7 @@ import { createAuthController } from "/assistant/auth-controller.js?v=4";
 import { createSkillsController } from "/assistant/skills-controller.js?v=1";
 import { createWorkspaceController } from "/assistant/workspace-controller.js?v=1";
 import { createSettingsDialog } from "/assistant/settings-dialog.js?v=1";
+import { createProjectPrompt } from './project-prompt.js';
 
 const state = createAssistantState();
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
@@ -35,13 +36,15 @@ let auth;
 let skills;
 let settings;
 let workspace;
+let projectPrompt;
 const workspaceSwitcher = createWorkspaceSwitcher({
   trigger: el.workspaceSwitcher,
   showPathTooltip: false,
   api,
   uiDialogs,
-  hasDraft: () => Boolean(el.promptInput.value.trim() || chat?.imageCount()),
-  clearDraft: () => chat?.clearWorkspaceDraft(),
+  hasDraft: () => Boolean(el.promptInput.value.trim() || chat?.imageCount() || projectPrompt?.hasDraft()),
+  getDraftWarning: () => projectPrompt?.hasDraft() ? '切换项目将放弃未保存的项目提示词，并清空未发送的消息。' : '切换工作区将清空当前未发送的内容。',
+  clearDraft: () => { chat?.clearWorkspaceDraft(); projectPrompt?.discard(); },
   onActivated: ({ workspace: active }) => {
     workspace?.setWorkspace(active);
     workspace?.scheduleWorkspaceReload(`已切换到工作区：${active.name}`);
@@ -68,6 +71,7 @@ chat = createChatView({
   state: state.chat, elements: el, agentClient, sessionService, replyActions, directory, execution, command, uiDialogs, renderMarkdown,
   showNotice, showError,
   getTurnFiles: workspace.turnFiles,
+  getScope: () => `${currentWorkspaceId()}:${state.sessions.currentSessionId || ''}`,
   setWorkspaceOpen: workspace.setWorkspaceOpen,
   previewWorkspaceFile: workspace.previewWorkspaceFile,
   updateStateFromAgent,
@@ -88,6 +92,7 @@ skills = createSkillsController({
   state: state.skills, elements: el, api, uiDialogs, renderMarkdown, markdownBodyWithoutFrontmatter,
   showNotice, showError, showSettingsToast,
 });
+projectPrompt = createProjectPrompt({ mount: el.projectPromptTab, api, getWorkspace: () => workspace?.workspace(), uiDialogs });
 settings = createSettingsDialog({
   elements: el,
   closeActiveLogin: auth.closeActiveLogin,
@@ -95,6 +100,8 @@ settings = createSettingsDialog({
   loadModelsConfig: () => state.models.modelsConfig ? undefined : models.loadModelsConfig(),
   loadModelCatalog: models.loadModelCatalog,
   loadSkills: skills.loadSkills,
+  loadProjectPrompt: projectPrompt.load,
+  canLeaveProjectPrompt: projectPrompt.canLeave,
   showError,
 });
 
@@ -108,6 +115,7 @@ const agentEvents = createAgentEventStream({
 });
 
 let noticeTimer;
+let bootstrapSequence = 0;
 void start();
 
 async function start() {
@@ -173,16 +181,21 @@ function bindEvents() {
 }
 
 async function loadBootstrap() {
+  const request = ++bootstrapSequence, scope = currentWorkspaceId();
+  let data;
+  const current = () => request === bootstrapSequence && (!scope || scope === currentWorkspaceId()) && (!data || agentClient.bootstrapCurrent(data));
   chat.stopResponseFallback();
   chat.setRuntime("正在准备对话……");
   try {
-    const data = await agentClient.bootstrap();
+    data = await agentClient.bootstrap();
+    const enabledModels = await models.resolveEnabledModels(data.enabledModels);
+    if (!current()) return;
     workspace.setWorkspace(data.workspace || workspace.workspace());
     if (data.workspaces) workspaceSwitcher.sync(data.workspaces);
     if (data.workspaces?.warning && !sessionStorage.getItem("super-baodan-workspace-warning")) {
       sessionStorage.setItem("super-baodan-workspace-warning", "shown"); showNotice(data.workspaces.warning, true);
     }
-    models.setEnabledModels(await models.resolveEnabledModels(data.enabledModels));
+    models.setEnabledModels(enabledModels);
     sessions.setCurrentSession(data.state?.sessionId);
     chat.setRuntimeState({ running: Boolean(data.state?.isStreaming), streaming: Boolean(data.state?.isStreaming) });
     workspace.setTurnFiles(data.turnFiles);
@@ -192,9 +205,10 @@ async function loadBootstrap() {
     sessions.renderSessions(data.sessions || []);
     updateStateFromAgent(data.state || {});
     await workspace.refreshWorkspaceTreeIfOpen();
+    if (!current()) return;
     chat.setRuntime(data.state?.isStreaming ? "正在处理……" : "", "ready");
     if (data.state?.isStreaming) chat.startResponseFallback();
-  } catch (error) { chat.setRuntime("对话加载失败，请重试", "error"); showError(error); }
+  } catch (error) { if (error.staleResponse || !current()) return; chat.setRuntime("对话加载失败，请重试", "error"); showError(error); }
 }
 
 function handleAgentEvent(event) {
@@ -227,7 +241,7 @@ function handleAgentEvent(event) {
       if (event.renamed) { workspace.setWorkspace(event.workspace); workspaceSwitcher.sync({ workspace: event.workspace }); break; }
       const hadDraft = Boolean(el.promptInput.value.trim() || chat.imageCount());
       sessions.clearSearch();
-      chat.clearWorkspaceDraft(); workspace.setWorkspace(event.workspace); workspaceSwitcher.sync({ workspace: event.workspace });
+      chat.clearWorkspaceDraft(); workspace.setWorkspace(event.workspace); projectPrompt.contextChanged(); workspaceSwitcher.sync({ workspace: event.workspace });
       workspace.scheduleWorkspaceReload(`已切换到工作区：${event.workspace.name}${hadDraft ? "，未发送内容已清空" : ""}`);
       break;
     }
@@ -265,14 +279,14 @@ async function refreshStateAndSessions() {
 }
 
 async function shutdownWorkbench() {
-  if (!await uiDialogs.confirm("Windows Pi 和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" })) return;
+  if (!await uiDialogs.confirm("助手和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" })) return;
   const shutdownIcon = document.querySelector(".brand-row img")?.cloneNode(true);
   setIconBusy(el.exitWorkbench, true);
   try { await api("/api/system/shutdown", { method: "POST" }); } catch {}
   const main = document.createElement("main"); main.className = "shutdown-screen";
   const content = document.createElement("div"); if (shutdownIcon) content.append(shutdownIcon);
   const title = document.createElement("h1"); title.textContent = "工作台已退出";
-  const message = document.createElement("p"); message.textContent = "Windows Pi 和后台服务已关闭，可以关闭此窗口。";
+  const message = document.createElement("p"); message.textContent = "助手和后台服务已关闭，可以关闭此窗口。";
   content.append(title, message); main.append(content); document.body.replaceChildren(main);
 }
 

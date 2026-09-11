@@ -1,4 +1,5 @@
 import { createCardOrder } from './card-order.js';
+import { createReadError } from './read-error.js';
 
 const TYPE_LABELS = { meeting: "会议纪要", work: "工作记录", idea: "想法随记", other: "其他" };
 
@@ -25,6 +26,7 @@ export function createDailyRecords({
   async function loadDate(date) {
     const requestId = ++state.dayRequest;
     state.selectedDate = date;
+    if (!state.searchQuery) el.dailyRecordList.innerHTML = emptyState('正在读取…', '· · ·');
     try {
       const data = await api(`/api/daily-records?date=${encodeURIComponent(date)}`, { cache: "no-store" });
       if (requestId !== state.dayRequest || date !== state.selectedDate) return;
@@ -36,7 +38,7 @@ export function createDailyRecords({
       if (requestId !== state.dayRequest) return;
       state.records = [];
       dayView.setRecordCount(0);
-      if (!state.searchQuery) el.dailyRecordList.innerHTML = emptyState(error.message, "!");
+      if (!state.searchQuery) el.dailyRecordList.replaceChildren(createReadError(error.message, () => loadDate(state.selectedDate)));
       toast(error.message, true);
     }
   }

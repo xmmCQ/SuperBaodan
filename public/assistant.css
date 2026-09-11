@@ -555,7 +555,9 @@ textarea {
   color: #718399;
 }
 
+.attachment-limits { flex-basis: 100%; color: var(--muted); font-size: 11px; }
 .attachments {
+  flex-wrap: wrap;
   max-width: 950px;
   margin: 5px auto 0;
   font-size: 12px;

@@ -29,7 +29,7 @@ test("六条浏览器主链路使用临时数据和独立端口", { timeout: 20_
       vskills: document.querySelectorAll('.vskill-chip').length,
       minWidth: getComputedStyle(document.body).minWidth
     })`);
-    assert.deepEqual(JSON.parse(result), { loading: "none", days: 42, workspace: "测试工作区", vskills: 1, minWidth: "1180px" });
+    assert.deepEqual(JSON.parse(result), { loading: "none", days: 42, workspace: "测试工作区", vskills: 1, minWidth: "0px" });
   });
 
   await t.test("新增、编辑、完成、改期和删除待办", async () => {

@@ -1,4 +1,4 @@
-export function createWorkspaceSwitcher({ trigger, api, uiDialogs, showPathTooltip = true, hasDraft = () => false, clearDraft = () => {}, onActivated = async () => {}, onError = console.error }) {
+export function createWorkspaceSwitcher({ trigger, api, uiDialogs, showPathTooltip = true, hasDraft = () => false, getDraftWarning = () => '切换工作区将清空当前未发送的内容。', clearDraft = () => {}, onActivated = async () => {}, onError = console.error }) {
   let data = { activeWorkspaceId: null, items: [] };
   const manager = buildManagerDialog();
   const picker = buildPickerDialog();
@@ -90,7 +90,7 @@ export function createWorkspaceSwitcher({ trigger, api, uiDialogs, showPathToolt
 
   async function activate(item) {
     if (hasDraft()) {
-      const confirmed = await uiDialogs.confirm("切换工作区将清空当前未发送的内容。", { title: "切换工作区", confirmText: "清空并切换" });
+      const confirmed = await uiDialogs.confirm(getDraftWarning(), { title: "切换工作区", confirmText: "清空并切换" });
       if (!confirmed) return;
     }
     manager.dialog.classList.add("busy");

@@ -1,6 +1,8 @@
 import { repairToolOutputEncoding } from "/assistant/text-normalization.js?v=1";
 import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
 import { createResponseFallback } from "../core/response-fallback.js";
+import { createImageAttachments, readFileAsDataUrl } from './image-attachments.js';
+import { validatePromptPayload } from '../core/prompt-images.js';
 
 export function createChatView({
   state,
@@ -13,13 +15,16 @@ export function createChatView({
   showNotice,
   showError,
   getTurnFiles,
+  getScope = () => `${agentClient.state?.().workspace?.id || ''}:${agentClient.state?.().sessionId || ''}`,
   setWorkspaceOpen,
   previewWorkspaceFile,
   updateStateFromAgent
 }) {
   const ASSISTANT_WORKING_TEXT = "努力搬砖中！";
   const MESSAGE_BOTTOM_THRESHOLD = 80;
-  let stickToMessageBottom = true, scrollEpoch = 0;
+  let stickToMessageBottom = true, scrollEpoch = 0, sending = null;
+  const attachments = createImageAttachments({ state, input: el.imageInput, container: el.attachments, getScope, showError });
+  const addImages = attachments.add, renderAttachments = attachments.render, clearImages = attachments.clear;
   const historyWindow = createMessageWindow();
   const responseFallback = createResponseFallback({
     readSnapshot: (options) => agentClient.getSnapshot(options),
@@ -305,17 +310,21 @@ function createToolCard(name, args = "") {
 }
 
 async function sendPrompt() {
+  if ((sending && sending.scope === getScope()) || attachments.isReading()) { showNotice('正在读取附件或确认发送，请稍候'); return; }
   const instruction = el.promptInput.value.trim();
   if (!instruction && !state.images.length) return;
+  try { validatePromptPayload({ message: instruction, images: state.images }); } catch (error) { showError(error); return; }
+  const scope = getScope();
   const quoted = replyActions?.take(instruction), message = quoted?.message ?? instruction;
   el.promptInput.value = "";
   resizePrompt();
   const user = { role: "user", content: message || "[图片]" };
   el.messages.querySelector(".welcome")?.remove();
-  el.messages.append(createMessageNode(user));
+  const userNode = createMessageNode(user); el.messages.append(userNode);
   scrollBottom("auto", true);
-  const images = state.images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
-  clearImages();
+  const ticket = attachments.take();
+  const images = ticket.items.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
+  const sendToken = { scope }; sending = sendToken;
   const wasRunning = state.running;
   try {
     state.running = true;
@@ -328,8 +337,11 @@ async function sendPrompt() {
       streamingBehavior: wasRunning ? "followUp" : undefined,
     });
   } catch (error) {
+    if (scope !== getScope()) return;
     if (error.acceptanceUnknown) { showNotice(error.message, true); return; }
-    replyActions?.restore(quoted);
+    userNode.remove(); attachments.restore(ticket);
+    if (!el.promptInput.value) el.promptInput.value = instruction;
+    resizePrompt(); replyActions?.restore(quoted);
     stopResponseFallback();
     if (!wasRunning) {
       state.running = false;
@@ -337,7 +349,7 @@ async function sendPrompt() {
       updateControls();
     }
     showError(error);
-  }
+  } finally { if (sending === sendToken) sending = null; }
 }
 
 async function compactSession() {
@@ -366,32 +378,6 @@ async function syncMessagesFromAgent() {
 function startResponseFallback() { responseFallback.start(); }
 
 function stopResponseFallback() { responseFallback.stop(); }
-
-async function addImages() {
-  const files = [...el.imageInput.files];
-  for (const file of files) {
-    const dataUrl = await readFileAsDataUrl(file);
-    state.images.push({ name: file.name, mimeType: file.type, data: dataUrl.split(",", 2)[1] });
-  }
-  el.imageInput.value = "";
-  renderAttachments();
-}
-
-function renderAttachments() {
-  el.attachments.replaceChildren();
-  el.attachments.classList.toggle("hidden", !state.images.length);
-  state.images.forEach((image, index) => {
-    const chip = document.createElement("button");
-    chip.className = "attachment-chip";
-    chip.textContent = `${image.name} ×`;
-    chip.addEventListener("click", () => { state.images.splice(index, 1); renderAttachments(); });
-    el.attachments.append(chip);
-  });
-}
-
-function clearImages() { state.images = []; renderAttachments(); }
-
-function readFileAsDataUrl(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
 
 async function handleExtensionUi(request) {
   try {

@@ -48,13 +48,13 @@ export async function readBinaryBody(req, maxBytes) {
   return Buffer.concat(chunks);
 }
 
-export async function readJsonBody(req) {
+export async function readJsonBody(req, maxBytes = 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > 1024 * 1024) throw mutationError(413, "请求内容过大");
+    if (size > maxBytes) throw mutationError(413, "请求内容过大");
     chunks.push(buffer);
   }
   const text = Buffer.concat(chunks).toString("utf8");

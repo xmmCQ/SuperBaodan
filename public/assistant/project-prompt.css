@@ -1,0 +1,12 @@
+.project-prompt-head, .project-prompt-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.project-prompt-head h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.project-prompt-context { margin: 16px 0 5px; font-size: 13px; font-weight: 600; }
+.project-prompt-path, .project-prompt-hint { color: var(--muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.project-prompt-hint { margin-bottom: 12px; }
+.project-prompt-editor { width: 100%; min-height: 300px; max-height: 48vh; resize: vertical; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; line-height: 1.7; }
+.project-prompt-editor:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.project-prompt-actions { margin-top: 12px; }
+.project-prompt-status { flex: 1; min-width: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+#projectPromptTab button { flex-shrink: 0; padding: 8px 14px; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--text); background: var(--panel); font-size: 12px; }
+#projectPromptTab .project-prompt-save { background: var(--accent); color: #fff; border-color: var(--accent); }
+#projectPromptTab button:disabled { opacity: .45; cursor: default; }

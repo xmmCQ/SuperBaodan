@@ -1,0 +1,34 @@
+/* Fixed desktop canvas: preserve the reference laptop's proportions. */
+body { min-width: 0; overflow: hidden; }
+.home-canvas-host { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.app-shell {
+  max-width: none;
+  width: var(--home-design-width, 1463px);
+  height: var(--home-design-height, 800px);
+  min-height: 0;
+  margin: 0;
+  zoom: var(--home-canvas-scale, 1);
+  padding: 20px var(--home-design-padding, 21.945px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+}
+.workspace { min-height: 0; grid-template-columns: minmax(0, 68fr) minmax(360px, 32fr); align-items: stretch; }
+.dashboard-column { min-height: 0; }
+.overview-grid { min-height: 0; grid-template-columns: minmax(0, 40fr) minmax(300px, 28fr); grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+.calendar-panel, .day-panel { min-height: 0; padding: var(--home-panel-padding, 18.2875px); display: flex; flex-direction: column; }
+.calendar-panel > :not(.calendar-grid), .day-panel > .panel-heading, .day-view-tabs { flex-shrink: 0; }
+.calendar-grid { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+.calendar-day { min-height: 54px; }
+.calendar-legend { flex-wrap: wrap; gap: 8px 14px; }
+.day-title-row { flex-wrap: wrap; }
+#dayTasksPane, #dailyRecordsPane { flex: 1; min-height: 0; overflow: hidden; }
+#dayTasksPane > .day-list { height: 100%; max-height: none; align-content: start; }
+#dailyRecordsPane:not(.hidden) { display: flex; flex-direction: column; }
+.daily-record-search, .daily-record-search-status { flex-shrink: 0; }
+#dailyRecordList { flex: 1; min-height: 0; max-height: none; overflow: auto; align-content: start; }
+.chat-panel { position: relative; top: auto; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.chat-panel > :not(.chat-messages) { flex-shrink: 0; }
+.chat-panel > .chat-messages { flex: 1; height: 0; min-height: 0; }
+.chat-header { flex-wrap: wrap; }
+.chat-composer textarea { min-width: 0; }

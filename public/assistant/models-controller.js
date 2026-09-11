@@ -10,6 +10,8 @@ export function createModelsController({
   loadBootstrap,
   updateStateFromAgent
 }) {
+  let availableModels = [];
+  const validModel = (model) => Boolean(model?.provider && model?.id && model.provider !== "unknown" && model.id !== "unknown");
   const KEEP_SECRET = "__SUPER_BAODAN_KEEP_SECRET__";
   const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 async function resolveEnabledModels(bootstrapEnabledModels) {
@@ -58,13 +60,15 @@ async function switchThinking() {
 }
 
 function renderModels(models, current) {
+  availableModels = models.filter(validModel);
+  models = availableModels;
   const enabled = state.enabledModels;
   const visible = !enabled.length ? models : models.filter((model) => {
     const key = `${model.provider}/${model.id}`;
     return enabled.some((pattern) => modelScopeMatches(pattern, key, model.id));
   });
   state.models = [...visible].sort((a, b) => `${a.provider}/${a.name || a.id}`.localeCompare(`${b.provider}/${b.name || b.id}`, undefined, { numeric: true }));
-  state.currentModel = current ? { provider: current.provider, id: current.id } : state.currentModel;
+  state.currentModel = validModel(current) ? { provider: current.provider, id: current.id } : null;
   renderModelPicker();
   updateModelPickerButton();
 }
@@ -97,7 +101,13 @@ function renderModelPicker() {
 
 function updateModelPickerButton() {
   const current = state.models.find((model) => model.provider === state.currentModel?.provider && model.id === state.currentModel?.id);
-  el.modelPickerButton.textContent = current ? `${current.name || current.id} · ${current.provider}` : state.currentModel ? `${state.currentModel.id} · ${state.currentModel.provider}` : "选择模型";
+  const selected = availableModels.find((model) => model.provider === state.currentModel?.provider && model.id === state.currentModel?.id);
+  const hasModels = availableModels.length > 0;
+  el.modelPickerButton.closest(".model-picker").classList.toggle("hidden", !hasModels);
+  el.thinkingSelect.classList.toggle("hidden", !hasModels || !selected);
+  if (!hasModels) el.modelPickerPanel.classList.add("hidden");
+  const display = current || selected;
+  el.modelPickerButton.textContent = display ? `${display.name || display.id} · ${display.provider}` : "选择模型";
 }
 
 function renderThinking(levels, current) {
@@ -304,7 +314,7 @@ async function saveModelPreferences() {
 }
   function setEnabledModels(models) { state.enabledModels = Array.isArray(models) ? models : []; }
   function applyAgentState(agentState) {
-    if (agentState?.model) state.currentModel = { provider: agentState.model.provider, id: agentState.model.id };
+    if (Object.prototype.hasOwnProperty.call(agentState || {}, "model")) state.currentModel = validModel(agentState.model) ? { provider: agentState.model.provider, id: agentState.model.id } : null;
     if (agentState?.thinkingLevel) el.thinkingSelect.value = agentState.thinkingLevel;
     updateModelPickerButton();
   }

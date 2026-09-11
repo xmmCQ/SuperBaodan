@@ -17,11 +17,13 @@ test("真实Windows SDK：扩展UI、工具、会话恢复、设置维护及释�
   const oldAgentDir = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_OFFLINE = "1";
   let modelRequests = 0;
+  let sawProjectPrompt = false;
   const modelServer = createServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
     const request = JSON.parse(body);
     modelRequests += 1;
+    if (request.messages.some(item => JSON.stringify(item.content).includes('PROJECT_PROMPT_LIVE_MARKER'))) sawProjectPrompt = true;
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     const send = (delta, finish_reason = null) => res.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", created: 1, model: "fixture", choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
     // Local deterministic provider: first turn calls read; next turn replies.
@@ -78,6 +80,11 @@ export default function(pi) {
   });
   try {
     await runtime.ensureStarted();
+    const sameSession = runtime.host.session;
+    const applied = await runtime.updateProjectPrompt(async () => { await temp.write('workspace/AGENTS.md', 'PROJECT_PROMPT_LIVE_MARKER：按项目规范协作。'); return { revision: 'fixture' }; });
+    assert.equal(applied.applied, true);
+    assert.equal(runtime.host.session, sameSession);
+    assert.ok(runtime.host.session.agent.state.systemPrompt.includes('PROJECT_PROMPT_LIVE_MARKER'));
     const commands = await runtime.send({ type: "get_commands" });
     assert.ok(commands.commands.some((item) => item.name === "sdk-check"));
     await runtime.send({ type: "set_model", provider: "fixture", modelId: "fixture" });
@@ -104,6 +111,7 @@ export default function(pi) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     assert.equal(modelRequests, 2);
+    assert.equal(sawProjectPrompt, true);
     const messages = (await runtime.send({ type: "get_messages" })).messages;
     assert.ok(messages.some((item) => item.role === "toolResult"));
     const blocked = messages.find((item) => item.role === "toolResult" && item.toolCallId === "fixture-nul");
@@ -141,8 +149,9 @@ export default function(pi) {
     assert.equal(events.length, repeatOffset);
     await runtime.close();
     const lifecycle = await readFile(temp.resolve("workspace", "lifecycle.log"), "utf8");
-    assert.equal(lifecycle.split("start\n").length - 1, 5);
-    assert.equal(lifecycle.split("shutdown\n").length - 1, 5);
+    // Project-prompt reload adds one shutdown/start pair without replacing the session.
+    assert.equal(lifecycle.split("start\n").length - 1, 6);
+    assert.equal(lifecycle.split("shutdown\n").length - 1, 6);
     assert.equal(runtime.host, null);
     assert.ok(events.some((event) => event.method === "notify"));
   } finally {

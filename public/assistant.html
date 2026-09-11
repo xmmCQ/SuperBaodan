@@ -18,13 +18,14 @@
   <link rel="stylesheet" href="/assistant/workspace-panel.css">
   <link rel="stylesheet" href="/assistant/floating-tools.css?v=2">
   <link rel="stylesheet" href="/core/search-input.css?v=1">
+  <link rel="stylesheet" href="/assistant/project-prompt.css">
 </head>
 <body class="assistant-page">
   <div class="assistant-shell workspace-closed">
     <aside id="sessionSidebar" class="sidebar">
       <div class="brand-row">
         <img src="/baodan-avatar.png" alt="宝蛋">
-        <div><b>超级宝蛋</b><small>Windows Pi</small></div>
+        <div><b>超级宝蛋</b></div>
       </div>
       <button id="workspaceSwitcher" class="workspace-trigger" type="button"><svg aria-hidden="true"><use href="/icons.svg?v=3#folder"></use></svg><span data-workspace-label>选择工作区</span><svg class="workspace-trigger-chevron" aria-hidden="true"><use href="/icons.svg?v=3#chevron-down"></use></svg></button>
       <div class="session-tools">
@@ -44,14 +45,14 @@
     <main class="chat-main">
       <header class="toolbar">
         <div class="runtime-state" role="status" aria-live="polite"><i id="runtimeDot" aria-hidden="true"></i><span id="runtimeText">正在准备对话……</span></div>
-        <div class="model-picker">
+        <div class="model-picker hidden">
           <button id="modelPickerButton" class="model-picker-button">读取模型……</button>
           <div id="modelPickerPanel" class="model-picker-panel hidden">
             <input id="modelFilter" type="search" placeholder="搜索模型名称或ID" autocomplete="off">
             <div id="modelPickerList" class="model-picker-list"></div>
           </div>
         </div>
-        <select id="thinkingSelect" aria-label="思考等级"><option value="off">off</option></select>
+        <select id="thinkingSelect" class="hidden" aria-label="思考等级"><option value="off">off</option></select>
         <button id="settingsButton" class="icon-action tooltip-down" type="button" aria-label="设置" data-tooltip="设置"><svg aria-hidden="true"><use href="/icons.svg#settings"></use></svg></button>
         <button id="showWorkspace" class="icon-action tooltip-down" type="button" aria-label="显示或折叠文件工作区" data-tooltip="文件工作区"><svg aria-hidden="true"><use href="/icons.svg#panel-right"></use></svg></button>
       </header>
@@ -125,10 +126,12 @@
       <button data-settings-tab="accounts" class="active">模型配置</button>
       <button data-settings-tab="custom">自定义模型（高级）</button>
       <button data-settings-tab="preferences">新对话默认设置</button>
+      <button data-settings-tab="projectPrompt">项目提示词</button>
       <button data-settings-tab="skills">技能管理</button>
       <button data-settings-tab="reading">阅读设置</button>
     </nav>
     <section id="readingTab" class="settings-tab"></section>
+    <section id="projectPromptTab" class="settings-tab"></section>
     <section id="accountsTab" class="settings-tab active">
       <div id="loginProgress" class="login-progress hidden"></div>
       <div class="provider-search-row">

@@ -116,7 +116,9 @@ export function createConversationDirectory({ button, container, getScope, loadE
       }
       const behavior = container.style.scrollBehavior;
       container.style.scrollBehavior = "auto";
-      container.scrollTop += destination.getBoundingClientRect().top - container.getBoundingClientRect().top - 12;
+      const canvas = container.closest('.app-shell');
+      const scale = canvas ? Number.parseFloat(getComputedStyle(canvas).zoom) || 1 : 1;
+      container.scrollTop += (destination.getBoundingClientRect().top - container.getBoundingClientRect().top) / scale - 12;
       await new Promise(requestAnimationFrame);
       if (valid()) updateActive();
       container.style.scrollBehavior = behavior;

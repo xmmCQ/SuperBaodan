@@ -1,4 +1,6 @@
 import http from "node:http";
+import { WorkApps } from '../../lib/work-apps.mjs';
+import { readProjectPrompt, saveProjectPrompt } from '../../lib/project-prompt.mjs';
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +13,7 @@ export async function createSmokeServer() {
   const temp = await createTempProject("super-baodan-browser-smoke-");
   const state = {
     revision: 1,
+    projectRoot: temp.root,
     tasks: [],
     dailyRecords: [],
     holidays: {},
@@ -25,6 +28,7 @@ export async function createSmokeServer() {
     ]]]),
     eventClients: new Set(),
   };
+  state.workApps = new WorkApps({ filePath: temp.resolve('work-apps.json'), defaults: [{ id: 'fixture', name: '测试软件', path: 'C:\\Apps\\Test.exe', enabled: true, processes: [] }], launch: async apps => { state.operations.push(...apps.map(app => `app:open:${app.id}`)); return { results: apps.map(app => ({ name: app.name, status: 'started', message: '已发送启动请求' })) }; } });
   const server = http.createServer((req, res) => void handle(req, res, state));
   await new Promise((resolve, reject) => server.listen(0, "127.0.0.1", resolve).once("error", reject));
   return {
@@ -87,17 +91,26 @@ async function handle(req, res, state) {
     if (req.method === "GET" && url.pathname === "/api/skills") return json(res, 200, { skills: [], diagnostics: [], cliAvailable: false });
     if (req.method === "GET" && url.pathname === "/api/vskills") return json(res, 200, { vskills: [{ id: "weekly", name: "本周总结", prompt: "总结本周" }] });
 
+    if (req.method === 'GET' && url.pathname === '/api/workspace/project-prompt') return json(res, 200, { ...await readProjectPrompt(state.projectRoot), workspaceId: workspace().id });
+    if (req.method === 'PUT' && url.pathname === '/api/workspace/project-prompt') {
+      const body = await readJson(req);
+      if (body.workspaceId !== workspace().id || state.projectPromptBusy) return json(res, 409, { error: '当前项目已切换或任务正在执行' });
+      return json(res, 200, { ...await saveProjectPrompt(state.projectRoot, body, path.join(state.projectRoot, 'prompt-backups')), workspaceId: workspace().id, applied: true });
+    }
     if (req.method === "POST" && url.pathname === "/api/workspace/upload/check") return json(res, 200, { conflicts: [] });
     if (req.method === "POST" && url.pathname === "/api/workspace/upload") return upload(req, res, url, state);
     if (req.method === "GET" && url.pathname === "/api/workspace/tree") return json(res, 200, tree(state));
     if (req.method === "GET" && url.pathname === "/api/workspace/search") return json(res, 200, { results: [...state.files].map(([name, content]) => ({ path: name, name, kind: "file", size: content.length, previewable: true })) });
     if (req.method === "GET" && url.pathname === "/api/workspace/preview") return preview(res, url, state);
-    if (req.method === "POST" && url.pathname === "/api/apps/open-all") return json(res, 200, { results: [] });
+    if (req.method === 'GET' && url.pathname === '/api/apps/config') return json(res, 200, await state.workApps.read());
+    if (req.method === 'PUT' && url.pathname === '/api/apps/config') return json(res, 200, await state.workApps.save(await readJson(req)));
+    if (req.method === 'POST' && url.pathname === '/api/apps/open') { const body = await readJson(req); return json(res, 200, await state.workApps.run(body.id, body.revision)); }
+    if (req.method === "POST" && url.pathname === "/api/apps/open-all") return json(res, 200, await state.workApps.run());
     if (req.method === "POST" && url.pathname === "/api/system/shutdown") return json(res, 200, { ok: true });
     if (req.method === "GET") return staticFile(url.pathname, res);
     json(res, 404, { error: "接口不存在" });
   } catch (error) {
-    json(res, 500, { error: error.message });
+    json(res, Number(error.statusCode) || 500, { error: error.message });
   }
 }
 

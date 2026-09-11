@@ -1,0 +1,24 @@
+.work-app-launcher { position: relative; display: inline-flex; }
+.work-app-menu { position: absolute; z-index: 80; top: calc(100% + 8px); right: 0; min-width: 136px; padding: 6px; border: 1px solid var(--hairline); border-radius: 14px; background: #fff; box-shadow: var(--shadow-modal); }
+.work-app-menu button { display: block; width: 100%; border: 0; border-radius: 9px; padding: 10px 12px; text-align: left; color: var(--ink); background: transparent; font-size: 12px; }
+.work-app-menu button:hover, .work-app-menu button:focus-visible { background: var(--green-soft); }
+.work-app-dialog { width: 640px; max-height: 85vh; overflow: auto; }
+.work-app-dialog::backdrop { background: rgba(10,10,10,.28); backdrop-filter: blur(5px); }
+.work-app-dialog fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.work-app-list { display: grid; gap: 12px; max-height: 48vh; overflow: auto; padding: 2px; }
+.work-app-row { padding: 14px; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface); }
+.work-app-row-head { display: flex; align-items: center; gap: 5px; margin-bottom: 9px; }
+.work-app-row input:not([type=checkbox]) { min-width: 0; width: 100%; padding: 9px 11px; border: 1px solid var(--hairline); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; font-size: 12px; }
+.work-app-row input:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+.work-app-row-head input { flex: 1; }
+.work-app-row-head .icon-action { flex: 0 0 28px; width: 28px; height: 28px; }
+.work-app-down svg { transform: rotate(180deg); }
+.work-app-row-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; }
+.work-app-row-foot label { display: inline-flex; align-items: center; gap: 7px; color: var(--slate); font-size: 11px; }
+.work-app-row input[type=checkbox] { accent-color: var(--green-deep); }
+.work-app-button { padding: 8px 13px; border: 1px solid var(--hairline); border-radius: 9999px; background: #fff; color: var(--slate); font-size: 12px; font-weight: 600; }
+.work-app-button:hover { color: var(--green-deep); background: var(--green-soft); }
+.work-app-save { border-color: var(--green); background: var(--green); color: var(--green-deep); }
+.work-app-add { margin-top: 12px; }
+.work-app-notice { min-height: 16px; margin: 10px 2px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.work-app-dialog button:disabled { opacity: .4; cursor: default; }

@@ -1,4 +1,5 @@
 import { createUiDialogController } from "/ui-dialog.js?v=5";
+import { createWorkApps } from './work-apps.js';
 import { setIconBusy } from "/icons.js?v=2";
 import { createWorkspaceSwitcher } from "/workspace-switcher.js?v=5";
 import { renderMarkdown } from "/markdown-renderer.js?v=2";
@@ -28,6 +29,8 @@ const uiDialogs = createUiDialogController({
   message: el.uiDialogMessage, field: el.uiDialogField,
   closeButton: el.uiDialogClose, cancelButton: el.uiDialogCancel, confirmButton: el.uiDialogConfirm,
 });
+
+createWorkApps({ trigger: el.openAppsButton, api, uiDialogs, toast, escapeHtml, openAll: openWorkApps });
 
 let homeChat;
 let vskills;
@@ -143,11 +146,24 @@ async function start() {
   bindEvents();
   agentEvents.connect();
   renderTodayLabel();
-  await workspaceSwitcher.load();
-  homeChat.setWorkspace(workspaceSwitcher.active());
-  await Promise.all([loadDashboardViews(), homeChat.warmupAgent(), vskills.loadVSkills()]);
-  await Promise.all([loadSelectedDay(state.planner.selectedDate), homeChat.loadHomeChatBootstrap()]);
+  // Work records are local, shared data: never wait for workspace or Agent startup.
+  const dayReady = loadSelectedDay(state.planner.selectedDate).finally(revealHome);
+  const dashboardReady = loadDashboardViews();
+  void vskills.loadVSkills().catch(error => toast(error.message, true));
+  void prepareAssistant();
   setInterval(homeChat.loadAgentStatus, 12000);
+  await Promise.all([dayReady, dashboardReady]);
+}
+
+async function prepareAssistant() {
+  try {
+    await workspaceSwitcher.load();
+    homeChat.setWorkspace(workspaceSwitcher.active());
+    await homeChat.warmupAgent();
+    await homeChat.loadHomeChatBootstrap();
+  } catch (error) {
+    toast(`助手准备失败，工作日历仍可使用：${error.message}`, true);
+  }
 }
 
 function revealHome() {
@@ -172,7 +188,6 @@ function bindEvents() {
     try { await loadDashboardViews(true); await loadSelectedDay(state.planner.selectedDate); }
     finally { setIconBusy(el.refreshButton, false); }
   });
-  el.openAppsButton.addEventListener("click", openWorkApps);
   el.exitWorkbenchButton.addEventListener("click", exitWorkbench);
   el.dayTasksTab.addEventListener("click", () => dayView.setActive("tasks"));
   el.dailyRecordsTab.addEventListener("click", () => dayView.setActive("records"));
@@ -247,14 +262,14 @@ function bindEvents() {
 }
 
 async function exitWorkbench() {
-  if (!await uiDialogs.confirm("Windows Pi 和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" })) return;
+  if (!await uiDialogs.confirm("助手和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" })) return;
   const shutdownIcon = document.querySelector(".brand-mark img")?.cloneNode(true);
   setIconBusy(el.exitWorkbenchButton, true);
   try { await api("/api/system/shutdown", { method: "POST" }); } catch {}
   const main = document.createElement("main"); main.className = "shutdown-screen";
   const content = document.createElement("div"); if (shutdownIcon) content.append(shutdownIcon);
   const title = document.createElement("h1"); title.textContent = "工作台已退出";
-  const message = document.createElement("p"); message.textContent = "Windows Pi 和后台服务已关闭，可以关闭此窗口。";
+  const message = document.createElement("p"); message.textContent = "助手和后台服务已关闭，可以关闭此窗口。";
   content.append(title, message); main.append(content); document.body.replaceChildren(main);
 }
 
@@ -262,7 +277,7 @@ async function openWorkApps() {
   setIconBusy(el.openAppsButton, true);
   try {
     const data = await api("/api/apps/open-all", { method: "POST" });
-    el.appsResults.innerHTML = data.results.map((item) => `<div class="app-result ${item.status === "failed" ? "failed" : ""}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.message)}</span></div>`).join("");
+    el.appsResults.innerHTML = data.results.map((item) => `<div class="app-result ${item.status === "failed" ? "failed" : ""}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.message)}</span></div>`).join("") + (data.warning ? `<p class="form-hint">${escapeHtml(data.warning)}</p>` : '');
     el.appsModal.classList.remove("hidden");
   } catch (error) { toast(error.message, true); }
   finally { setIconBusy(el.openAppsButton, false); }

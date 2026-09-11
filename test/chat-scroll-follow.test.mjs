@@ -21,8 +21,9 @@ const homeSource = await readFile(new URL("../public/home/home-chat.js", import.
 const assistantSource = await readFile(new URL("../public/assistant/chat-view.js", import.meta.url), "utf8");
 const assistantModuleSource = assistantSource
   .replace(/^import .*$/m, "const repairToolOutputEncoding = (value) => value;")
-  .replace('"../core/chat-lazy-load.js"', JSON.stringify(new URL("../public/core/chat-lazy-load.js", import.meta.url).href))
-  .replace('"../core/response-fallback.js"', JSON.stringify(new URL("../public/core/response-fallback.js", import.meta.url).href));
+  // This unit harness exercises scrolling only; attachment behavior has browser coverage.
+  .replace(/^import \{ createImageAttachments, readFileAsDataUrl \}.*$/m, 'const createImageAttachments = () => ({ add() {}, render() {}, clear() {} }); const readFileAsDataUrl = () => {};')
+  .replace(/from (["'])(\.[^"']+)\1/g, (_match, _quote, specifier) => `from ${JSON.stringify(new URL(specifier, new URL('../public/assistant/chat-view.js', import.meta.url)).href)}`);
 const { createChatView } = await import(`data:text/javascript;base64,${Buffer.from(assistantModuleSource).toString("base64")}`);
 
 test("首页对话在用户上翻后暂停跟随，回到底部后恢复", () => {
