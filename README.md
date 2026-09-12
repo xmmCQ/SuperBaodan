@@ -1,22 +1,22 @@
 <h1 align="center"><img src="public/baodan-avatar.png" width="96" alt="超级宝蛋"><br>超级宝蛋</h1>
 
-面向个人工作的 Windows 工作台，集中管理日历、待办、每日记录、常用软件和智能助手。
+基于Pi Agent开发的面向个人工作的 Windows 工作台，集中管理日历、待办、每日记录、常用软件和智能助手。
 
 <p align="center"><a href="https://github.com/xmmCQ/SuperBaodan/releases/latest">下载 Windows 安装包</a></p>
+
+![超级宝蛋首页](docs/screenshots/home.png)
 
 ## 安装与使用
 
 ### 安装
 
-支持 Windows 10 1809 或更新版本的 64 位系统。首次安装需要联网，可访问 `nodejs.org` 和 `registry.npmjs.org`。
+支持 Windows 10 1809 或更新版本的 64 位系统，首次安装需要联网。
 
 1. 下载并运行 **`SuperBaodan.exe`**。
 2. 选择安装目录，等待运行组件自动下载和安装。
 3. 从开始菜单或桌面快捷方式打开“超级宝蛋”。
 
-默认安装目录为 `%LOCALAPPDATA%\Programs\SuperBaodan`。无需手动安装 Node.js、Pi 或执行命令，也不需要 WSL。启动后在默认浏览器中使用，地址为 `http://127.0.0.1:3212`。
-
-私有仓库的安装包需要登录有访问权限的 GitHub 账号才能下载。安装包尚未做代码签名，Windows 可能显示“未知发布者”，请只运行可信来源的文件。
+默认安装目录为 `%LOCALAPPDATA%\Programs\SuperBaodan`，启动后在默认浏览器中使用，地址为 `http://127.0.0.1:3212`。
 
 ### 首次配置
 
@@ -42,7 +42,7 @@
 
 卸载默认保留这些数据。勾选“同时删除本软件的个人数据和登录信息”并再次确认后，会一并删除，包括默认工作区文件。**删除不可恢复，请先备份。** 外部工作文件夹和原有 Pi 配置不受影响，浏览器中的页面偏好需另行清除。
 
-助手默认空闲 10 分钟后休眠，再次使用时恢复会话。启动异常可查看 `%LOCALAPPDATA%\SuperBaodan\data\server-error.log`。
+助手默认空闲 10 分钟后休眠，再次使用时恢复会话。
 
 ## 产品功能
 
@@ -71,6 +71,8 @@
 - 通过对话目录定位提问和回复标题，快速回到最新消息。
 - 停止任务、压缩上下文，在当前任务结束后处理追加消息；连接中断后自动尝试恢复显示。
 
+![展开后的智能助手](docs/screenshots/assistant.png)
+
 ### 工作区与文件
 
 - 管理多个本机工作区，分别保存对话历史并恢复最后会话。
@@ -89,9 +91,17 @@
 
 - 按供应商搜索和选择模型，管理默认模型、思考等级及可见范围。
 - 支持 ChatGPT Plus/Pro（Codex）等 OAuth 登录、供应商 API Key 和自定义模型配置。
+
+![模型配置界面](docs/screenshots/model-settings.png)
+
 - 在设置中编辑当前项目的提示词，保存后用于当前会话的下一次提问，并提供备份、冲突及未保存提醒。
+
+![项目提示词管理界面](docs/screenshots/project-prompt.png)
+
 - 按项目、全局和只读来源查看 Skill，折叠分组并记住状态。
 - 搜索、安装、更新、卸载 Skill，管理自动调用显隐，创建和编辑本地自定义 Skill。
 - 将本地自定义 Skill 在项目与全局之间迁移，保留备份，同名不覆盖。
 - 使用固定提示词、Prompt Templates 和扩展快捷命令。
 - 调整聊天字号和正文宽度，保存本机阅读偏好。
+
+![Skill 管理界面](docs/screenshots/skills.png)
