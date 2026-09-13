@@ -16,6 +16,8 @@ import { WorkspaceService } from "../lib/workspace.mjs";
 import { WorkspaceRegistry, samePath } from "../lib/workspace-registry.mjs";
 import { publicErrorMessage } from "./response.mjs";
 import { PromptReceipts } from "./prompt-receipts.mjs";
+import { UiEventPayloads } from './ui-event-payloads.mjs';
+import { boundBrowserAgentEvent, MAX_BROWSER_EVENT_BYTES } from '../lib/pi-sdk-ui.mjs';
 import { createBoundedSse } from "./bounded-sse.mjs";
 import { enqueueWorkspaceOperation } from './workspace-operations.mjs';
 
@@ -41,9 +43,12 @@ class RuntimeContext {
     this.shutdownPromise = null;
     this.eventClients = new Set();
     this.eventStreams = new Map();
+    this.uiEventPayloads = new UiEventPayloads({ onFailure: event => this.emitAgentEvent(event) });
     this.promptReceipts = new PromptReceipts();
     this.activeAuthLoginAbort = null;
     this.authLoginSequence = 0;
+    this.toolCalls = new Map();
+    this.turnFileEpoch = 0;
     this.turnFiles = { involved: new Set(), modified: new Set() };
     this.server = null;
     this.vskillManager = new VSkillManager({ filePath: config.vskillFile, backupDir: config.backupDir });
@@ -151,6 +156,7 @@ class RuntimeContext {
       let candidate = null;
       this.workspaceSwitching = true;
       this.workspaceEpoch += 1;
+      this.uiEventPayloads.clear();
       try {
         await previous.piRuntime.close();
         previous.piAdmin.close();
@@ -239,20 +245,35 @@ class RuntimeContext {
     req.on("close", cleanup); res.on("close", cleanup);
     stream.write(`data: ${JSON.stringify({ type: "connected", running: this.piRuntime.running, state: this.piRuntime.state, idleTimeoutMs: this.piRuntime.idleTimeoutMs, workspace: this.publicWorkspace(this.activeWorkspace) })}\n\n`);
     const interactiveRuntime = this.switchCandidateRuntime || this.piRuntime;
-    for (const event of interactiveRuntime.pendingUiRequests()) stream.write(`data: ${JSON.stringify(event)}\n\n`);
+    for (const event of interactiveRuntime.pendingUiRequests()) stream.write(`data: ${JSON.stringify(this.prepareAgentEvent(event))}\n\n`);
   }
 
   broadcastAgentEvent(event) {
     if (event.type === "agent_start") {
-      this.turnFiles.involved.clear(); this.turnFiles.modified.clear();
-      this.emitAgentEvent({ type: "workspace_turn_files", ...this.turnFileSnapshot() });
+      this.clearTurnFiles();
     }
     this.emitAgentEvent(event);
     if (event.type === "tool_execution_start") void this.trackWorkspaceTool(event);
+    if (event.type === "tool_execution_end") {
+      const call = this.toolCalls.get(event.toolCallId);
+      if (call) { call.success = event.isError === false; this.confirmWorkspaceTool(event.toolCallId, call); }
+    }
+    if (["runtime_stopping", "runtime_exit"].includes(event.type)) { this.turnFileEpoch += 1; this.toolCalls.clear(); this.uiEventPayloads.clear(); }
+    if (event.type === "agent_settled") {
+      for (const [id, call] of this.toolCalls) if (call.success === undefined) this.toolCalls.delete(id);
+    }
+  }
+
+  prepareAgentEvent(event) {
+    if (event.type === 'extension_ui_request' && Buffer.byteLength(JSON.stringify(event)) > MAX_BROWSER_EVENT_BYTES) {
+      const runtime = this.switchCandidateRuntime || this.piRuntime;
+      return this.uiEventPayloads.put(event, runtime, this.workspaceEpoch, this.activeWorkspace.id);
+    }
+    return boundBrowserAgentEvent(event);
   }
 
   emitAgentEvent(event) {
-    const encoded = `data: ${JSON.stringify(event)}\n\n`;
+    const encoded = `data: ${JSON.stringify(this.prepareAgentEvent(event))}\n\n`;
     for (const client of this.eventClients) {
       if (client.destroyed) { this.eventClients.delete(client); this.eventStreams.delete(client); }
       else this.eventStreams.get(client)?.write(encoded);
@@ -263,15 +284,30 @@ class RuntimeContext {
     const toolName = String(event.toolName || "").toLowerCase();
     if (!["read", "edit", "write"].includes(toolName)) return;
     const rawPath = event.args?.path ?? event.args?.file_path ?? event.args?.filePath;
-    const relative = await this.workspaceService.normalizeToolPath(rawPath).catch(() => null);
-    if (!relative) return;
+    const id = event.toolCallId;
+    if (!id) return;
+    const call = { epoch: this.turnFileEpoch, workspace: this.workspaceService, writes: ["edit", "write"].includes(toolName) };
+    this.toolCalls.set(id, call);
+    const relative = await call.workspace.normalizeToolPath(rawPath).catch(() => null);
+    if (call.epoch !== this.turnFileEpoch || call.workspace !== this.workspaceService || this.toolCalls.get(id) !== call) return;
+    if (!relative) { this.toolCalls.delete(id); return; }
+    call.relative = relative;
     this.turnFiles.involved.add(relative);
-    if (["edit", "write"].includes(toolName)) this.turnFiles.modified.add(relative);
+    this.confirmWorkspaceTool(id, call);
     this.emitAgentEvent({ type: "workspace_turn_files", ...this.turnFileSnapshot() });
   }
 
+  confirmWorkspaceTool(id, call) {
+    if (!call.relative || call.success === undefined) return;
+    this.toolCalls.delete(id);
+    if (call.success && call.writes) {
+      this.turnFiles.modified.add(call.relative);
+      this.emitAgentEvent({ type: "workspace_turn_files", ...this.turnFileSnapshot() });
+    }
+  }
+
   turnFileSnapshot() { return { involved: [...this.turnFiles.involved], modified: [...this.turnFiles.modified] }; }
-  clearTurnFiles() { this.turnFiles.involved.clear(); this.turnFiles.modified.clear(); this.emitAgentEvent({ type: "workspace_turn_files", ...this.turnFileSnapshot() }); }
+  clearTurnFiles() { this.turnFileEpoch += 1; this.toolCalls.clear(); this.turnFiles.involved.clear(); this.turnFiles.modified.clear(); this.emitAgentEvent({ type: "workspace_turn_files", ...this.turnFileSnapshot() }); }
 
   async loadTasks() {
     try {
@@ -347,6 +383,7 @@ class RuntimeContext {
   shutdown() {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
+    this.uiEventPayloads.clear();
     this.shutdownPromise = (async () => {
       for (const client of this.eventClients) client.end();
       this.eventClients.clear();

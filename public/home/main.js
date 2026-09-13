@@ -41,6 +41,7 @@ const workspaceSwitcher = createWorkspaceSwitcher({
   uiDialogs,
   hasDraft: () => Boolean(el.chatInput.value.trim()),
   clearDraft: () => { el.chatInput.value = ""; homeChat?.autoResizeInput(); },
+  onActivating: () => agentClient.beginTransition(),
   onActivated: ({ workspace }) => {
     historySearch?.reset();
     homeChat?.setWorkspace(workspace);
@@ -126,6 +127,7 @@ vskills = createVSkills({
 });
 
 const agentEvents = createAgentEventStream({
+  captureContext: () => agentClient.captureContext({ allowTransition: true }),
   onEvent: (event) => {
     if (event.type === "workspace_changed" && !event.renamed) historySearch.reset();
     homeChat.handleHomeChatEvent(event);

@@ -29,7 +29,7 @@ export function createServerApplication(context) {
     try {
       const url = new URL(req.url, `http://${req.headers.host || `${context.config.host}:${context.config.port}`}`);
       if (context.shuttingDown && url.pathname !== "/api/system/shutdown") return json(res, 503, { error: "工作台正在退出" });
-      const switchAllowed = ["/api/health", "/api/agent/events", "/api/agent/command", "/api/agent/receipt"].includes(url.pathname) || /^\/api\/workspaces\/[^/]+\/activate$/.test(url.pathname);
+      const switchAllowed = ["/api/health", "/api/agent/events", "/api/agent/command", "/api/agent/receipt", "/api/agent/ui-payload"].includes(url.pathname) || /^\/api\/workspaces\/[^/]+\/activate$/.test(url.pathname);
       if (context.workspaceSwitching && !switchAllowed) return json(res, 409, { error: "工作区正在切换，请稍后重试" });
       const changesAgent = ["/api/agent/bootstrap", "/api/agent/new"].includes(url.pathname) || (url.pathname.startsWith("/api/sessions") && req.method !== "GET");
       if (changesAgent && context.piAdmin?.maintenanceActive) return json(res, 409, { error: "登录或配置维护中，请稍后重试" });

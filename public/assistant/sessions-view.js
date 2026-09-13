@@ -19,10 +19,12 @@ export function createSessionsView({
     onOpen: (hit) => activateSession({ path: hit.sessionPath }),
   });
 async function refreshSessions() {
+  const current = sessionService.beginListRead();
   setIconBusy(el.refreshSessions, true);
   try {
-    renderSessions(await sessionService.list());
-  } catch (error) { showError(error); }
+    const listed = await sessionService.list();
+    if (current()) renderSessions(listed);
+  } catch (error) { if (!error.staleResponse) showError(error); }
   finally { setIconBusy(el.refreshSessions, false); }
 }
 
@@ -31,7 +33,7 @@ async function newSession() {
   try {
     await sessionService.create();
     await loadBootstrap();
-  } catch (error) { showError(error); }
+  } catch (error) { if (!error.staleResponse) showError(error); if (error.refreshRequired?.()) await loadBootstrap(); }
 }
 
 async function activateSession(session) {
@@ -39,7 +41,7 @@ async function activateSession(session) {
   try {
     await sessionService.activate(session.path);
     await loadBootstrap();
-  } catch (error) { showError(error); }
+  } catch (error) { if (!error.staleResponse) showError(error); if (error.refreshRequired?.()) await loadBootstrap(); }
 }
 
 function renderSessions(sessions) {
@@ -88,11 +90,10 @@ async function renameSession(session) {
 async function deleteSession(session) {
   if (!await uiDialogs.confirm(`删除对话“${session.title}”？此操作不可恢复。`, { title: "删除对话", danger: true, confirmText: "删除" })) return;
   try {
-    const result = await sessionService.remove(session.path);
-    if (result.activeDeleted) await loadBootstrap();
-    else await refreshSessions();
+    await sessionService.remove(session.path);
+    await loadBootstrap();
     showNotice("对话已删除");
-  } catch (error) { showError(error); }
+  } catch (error) { if (!error.staleResponse) showError(error); if (error.refreshRequired?.()) await loadBootstrap(); }
 }
   function setCurrentSession(id) { state.currentSessionId = id || null; }
   return { clearSearch: searchView.reset, setCurrentSession, refreshSessions, newSession, activateSession, renderSessions, renameSession, deleteSession };

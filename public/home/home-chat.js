@@ -1,3 +1,4 @@
+import { createSnapshotRecovery } from '../core/snapshot-recovery.js';
 import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
 import { messageBodyText as chatMessageText } from "../core/reply-actions.js";
 import { createBootstrapLoader } from '../core/bootstrap-loader.js';
@@ -19,8 +20,10 @@ export function createHomeChat({
 }) {
   const HOME_ASSISTANT_WORKING_TEXT = "努力搬砖中！";
   const CHAT_BOTTOM_THRESHOLD = 80;
-  let stickToChatBottom = true;
+  let stickToChatBottom = true, liveCurrent = null;
   const historyWindow = createMessageWindow();
+  const captureLiveContext = () => agentClient?.captureContext?.({ allowTransition: true }) || (() => true);
+  const snapshotRecovery = createSnapshotRecovery({ sync: syncHomeChatMessages, captureContext: captureLiveContext });
   let restoringHistory = false, previousTop = 0;
   el.chatMessages.addEventListener("scroll", () => {
     const top = el.chatMessages.scrollTop, scrollingUp = top < previousTop;
@@ -92,20 +95,21 @@ const loadHomeChatBootstrap = createBootstrapLoader({ client: agentClient, getWo
 
 async function syncHomeChatMessages() {
   try {
-    const { state: current, messages } = await sessionService.syncCurrent();
+    const synced = await sessionService.syncCurrent();
+    if (!synced.current()) return;
+    const { state: current, messages } = synced;
     state.activeSessionId = current?.sessionId || state.activeSessionId;
     state.activeSessionPath = current?.sessionFile || state.activeSessionPath;
     state.chatBusy = Boolean(current?.isStreaming);
     renderChatMessages(messages, { hideTrailingAssistant: state.chatBusy, forceScroll: false });
     if (state.chatBusy) showHomeAssistantWorking();
     setChatControls(state.chatBusy);
-  } catch (error) {
-    console.warn(error);
-  }
+  } catch (error) { if (!error.staleResponse) { snapshotRecovery.recovered(); console.warn(error); } }
 }
-
 function handleHomeChatEvent(event) {
   const agentState = agentClient.applyEvent(event);
+  snapshotRecovery.event(event);
+  if (event.type === "extension_error") toast(event.error || "扩展执行失败", true);
   if (event.type === "connected" && event.workspace) {
     state.workspace = event.workspace;
     workspaceSwitcher.sync({ workspace: event.workspace });
@@ -117,6 +121,7 @@ function handleHomeChatEvent(event) {
   } else if (event.type === "message_start" && event.message?.role === "assistant") {
     showHomeAssistantWorking();
   } else if (event.type === "message_update") {
+    resetStaleLive(); if (!state.liveAssistant?.isConnected) showHomeAssistantWorking();
     const delta = event.assistantMessageEvent || {};
     if (delta.type === "text_delta") state.liveText += delta.delta || "";
     if (delta.type === "text_end" && typeof delta.content === "string") state.liveText = delta.content;
@@ -156,8 +161,9 @@ function handleHomeChatEvent(event) {
     scheduleHomeWorkspaceReload(`已切换到工作区：${event.workspace.name}${hadDraft ? "，未发送内容已清空" : ""}`);
   }
 }
-
 function renderChatMessages(messages, { hideTrailingAssistant = false, forceScroll = true } = {}) {
+  if (!snapshotRecovery.canRender()) return;
+  snapshotRecovery.recovered();
   replyActions?.syncContext();
   const shouldFollow = forceScroll || stickToChatBottom;
   const previousScrollTop = el.chatMessages.scrollTop;
@@ -208,13 +214,14 @@ function updateHistoryTabs() {
 }
 
 async function loadHistoryList() {
+  const current = sessionService.beginListRead();
   const requestId = ++state.historyRequest;
   const tab = state.historyTab;
   state.historyBusy = true;
   el.chatHistoryList.innerHTML = loadingState();
   try {
     const sessions = await sessionService.list();
-    if (requestId !== state.historyRequest || tab !== state.historyTab) return;
+    if (!current() || requestId !== state.historyRequest || tab !== state.historyTab) return;
     state.historyItems = sessions.map((session) => ({
       ...session,
       active: session.id === state.activeSessionId,
@@ -223,7 +230,7 @@ async function loadHistoryList() {
     }));
     renderHistoryList();
   } catch (error) {
-    if (requestId === state.historyRequest) {
+    if (current() && requestId === state.historyRequest) {
       el.chatHistoryList.innerHTML = `<div class="history-empty">${escapeHtml(error.message)}</div>`;
     }
   } finally {
@@ -303,7 +310,8 @@ async function activateHistorySession(item) {
     closeChatHistory();
     toast("已切换历史对话");
   } catch (error) {
-    toast(error.message, true);
+    if (!error.staleResponse) toast(error.message, true);
+    if (error.refreshRequired?.()) await loadHomeChatBootstrap();
   } finally {
     state.historyBusy = false;
   }
@@ -314,15 +322,12 @@ async function deleteHistorySession(item) {
   state.historyBusy = true;
   try {
     await sessionService.remove(item.path);
-    if (item.active) {
-      state.activeSessionId = null;
-      state.activeSessionPath = null;
-      renderChatWelcome(true);
-    }
+    await loadHomeChatBootstrap();
     await loadHistoryList();
     toast("对话已删除");
   } catch (error) {
-    toast(error.message, true);
+    if (!error.staleResponse) toast(error.message, true);
+    if (error.refreshRequired?.()) await loadHomeChatBootstrap();
   } finally {
     state.historyBusy = false;
   }
@@ -364,7 +369,8 @@ async function newHomeChat() {
     await loadHomeChatBootstrap();
     toast("新对话已开始");
   } catch (error) {
-    toast(error.message, true);
+    if (!error.staleResponse) toast(error.message, true);
+    if (error.refreshRequired?.()) await loadHomeChatBootstrap();
   } finally {
     setChatStatus("");
   }
@@ -401,10 +407,10 @@ function appendMessage(role, text, { forceScroll = false } = {}) {
   scrollChat(forceScroll);
   return node;
 }
-
+function resetStaleLive() { if (liveCurrent?.() === false) { state.liveAssistant?.remove(); state.liveAssistant = null; state.liveText = ""; liveCurrent = null; } }
 function showHomeAssistantWorking() {
-  setChatStatus("");
-  if (!state.liveAssistant?.isConnected) state.liveAssistant = appendMessage("assistant", "");
+  resetStaleLive(); setChatStatus("");
+  if (!state.liveAssistant?.isConnected) { state.liveAssistant = appendMessage("assistant", ""); liveCurrent = captureLiveContext(); }
   const bubble = state.liveAssistant;
   bubble.classList.add("working");
   bubble.setAttribute("role", "status");

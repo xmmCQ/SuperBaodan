@@ -14,12 +14,33 @@ export function createAgentClient({
     workspace: null,
   };
 
-  let bootstrapSequence = 0, workspaceEpoch = 0;
+  let bootstrapSequence = 0, workspaceEpoch = 0, readSequence = 0, transitions = 0, contentRevision = 0, workspaceRevision = 0;
+  const staleResponse = () => Object.assign(new Error('对话响应已过期'), { staleResponse: true });
+  function invalidateContext() { workspaceEpoch += 1; readSequence += 1; }
+  function beginTransition() {
+    transitions += 1; invalidateContext();
+    return () => { transitions -= 1; invalidateContext(); };
+  }
+  function captureContext({ allowTransition = false } = {}) {
+    const epoch = workspaceEpoch, workspaceId = getWorkspaceId() || runtime.workspace?.id || null;
+    return () => (allowTransition || !transitions) && epoch === workspaceEpoch && (!workspaceId || workspaceId === (getWorkspaceId() || runtime.workspace?.id || null));
+  }
+  function captureWorkspace() {
+    const revision = workspaceRevision, id = getWorkspaceId() || runtime.workspace?.id || null;
+    return () => revision === workspaceRevision && id === (getWorkspaceId() || runtime.workspace?.id || null);
+  }
+  function beginRead() {
+    const sequence = ++readSequence, epoch = workspaceEpoch, content = contentRevision;
+    const workspaceId = getWorkspaceId() || runtime.workspace?.id || null;
+    const available = !transitions;
+    return () => available && !transitions && sequence === readSequence && epoch === workspaceEpoch && content === contentRevision &&
+      (!workspaceId || workspaceId === (getWorkspaceId() || runtime.workspace?.id || null));
+  }
   const bootstrapTickets = new WeakMap();
   const staleBootstrap = () => Object.assign(new Error('初始化响应已过期'), { staleResponse: true });
   function bootstrapCurrent(data) {
     const ticket = bootstrapTickets.get(data);
-    if (!ticket || ticket.sequence !== bootstrapSequence || ticket.epoch !== workspaceEpoch) return false;
+    if (!ticket || ticket.sequence !== bootstrapSequence || ticket.epoch !== workspaceEpoch || !ticket.current()) return false;
     const current = getWorkspaceId() || runtime.workspace?.id || null;
     return (!ticket.workspaceId || ticket.workspaceId === current) && (!current || !data.workspace?.id || data.workspace.id === current);
   }
@@ -40,7 +61,9 @@ export function createAgentClient({
   }
 
   function applyEvent(event = {}) {
-    if ((event.type === 'workspace_changed' && !event.renamed) || (event.type === 'connected' && event.workspace?.id && runtime.workspace?.id && event.workspace.id !== runtime.workspace.id)) workspaceEpoch += 1;
+    if (['message_start', 'message_update', 'message_end', 'workspace_turn_files'].includes(event.type)) contentRevision += 1;
+    if (['agent_start', 'agent_settled', 'runtime_stopping', 'runtime_exit'].includes(event.type) || (event.type === 'runtime_ready' && runtime.sessionId && event.state?.sessionId !== runtime.sessionId)) invalidateContext();
+    if ((event.type === 'workspace_changed' && !event.renamed) || (event.type === 'connected' && event.workspace?.id && runtime.workspace?.id && event.workspace.id !== runtime.workspace.id)) { workspaceRevision += 1; invalidateContext(); }
     switch (event.type) {
       case "connected":
         runtime.runtimeState = event.state || (event.running ? "running" : "stopped");
@@ -86,11 +109,11 @@ export function createAgentClient({
   }
 
   async function bootstrap(options = {}) {
-    const ticket = { sequence: ++bootstrapSequence, workspaceId: getWorkspaceId() || runtime.workspace?.id || null, epoch: workspaceEpoch };
+    const ticket = { sequence: ++bootstrapSequence, workspaceId: getWorkspaceId() || runtime.workspace?.id || null, epoch: workspaceEpoch, current: beginRead() };
     let data;
     try { data = await request(workspaceUrl("/api/agent/bootstrap", ticket.workspaceId), { cache: "no-store", timeout: 0, ...options }); }
     catch (error) {
-      if (ticket.sequence !== bootstrapSequence || ticket.epoch !== workspaceEpoch || (ticket.workspaceId && ticket.workspaceId !== (getWorkspaceId() || runtime.workspace?.id || null))) throw staleBootstrap();
+      if (ticket.sequence !== bootstrapSequence || ticket.epoch !== workspaceEpoch || !ticket.current() || (ticket.workspaceId && ticket.workspaceId !== (getWorkspaceId() || runtime.workspace?.id || null))) throw staleBootstrap();
       throw error;
     }
     bootstrapTickets.set(data, ticket);
@@ -141,14 +164,18 @@ export function createAgentClient({
     }
   }
 
-  function getSnapshot({ messages = false, since, ...options } = {}) {
+  async function getSnapshot({ messages = false, since, ...options } = {}) {
+    const current = beginRead();
     const query = new URLSearchParams();
     if (messages) query.set("messages", "1");
     if (since != null) query.set("since", since);
-    return request(workspaceUrl(`/api/agent/snapshot?${query}`, getWorkspaceId()), { cache: "no-store", timeout: 15000, ...options });
+    const data = await request(workspaceUrl(`/api/agent/snapshot?${query}`, getWorkspaceId()), { cache: "no-store", timeout: 15000, ...options });
+    if (!current()) throw staleResponse();
+    return { ...data, current };
   }
 
   return {
+    captureContext, captureWorkspace, beginRead, beginTransition, invalidateContext,
     bootstrap,
     bootstrapCurrent,
     launch,

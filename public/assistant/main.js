@@ -45,6 +45,7 @@ const workspaceSwitcher = createWorkspaceSwitcher({
   hasDraft: () => Boolean(el.promptInput.value.trim() || chat?.imageCount() || projectPrompt?.hasDraft()),
   getDraftWarning: () => projectPrompt?.hasDraft() ? '切换项目将放弃未保存的项目提示词，并清空未发送的消息。' : '切换工作区将清空当前未发送的内容。',
   clearDraft: () => { chat?.clearWorkspaceDraft(); projectPrompt?.discard(); },
+  onActivating: () => agentClient.beginTransition(),
   onActivated: ({ workspace: active }) => {
     workspace?.setWorkspace(active);
     workspace?.scheduleWorkspaceReload(`已切换到工作区：${active.name}`);
@@ -70,7 +71,7 @@ workspace = createWorkspaceController({
 chat = createChatView({
   state: state.chat, elements: el, agentClient, sessionService, replyActions, directory, execution, command, uiDialogs, renderMarkdown,
   showNotice, showError,
-  getTurnFiles: workspace.turnFiles,
+  getTurnFiles: workspace.turnFiles, setTurnFiles: workspace.setTurnFiles,
   getScope: () => `${currentWorkspaceId()}:${state.sessions.currentSessionId || ''}`,
   setWorkspaceOpen: workspace.setWorkspaceOpen,
   previewWorkspaceFile: workspace.previewWorkspaceFile,
@@ -106,6 +107,7 @@ settings = createSettingsDialog({
 });
 
 const agentEvents = createAgentEventStream({
+  captureContext: () => agentClient.captureContext({ allowTransition: true }),
   onEvent: (event) => { chat.setLastAgentEventAt(Date.now()); handleAgentEvent(event); },
   onStatus: (status, detail) => {
     if (status === "open" && detail.reconnected) void chat.syncMessagesFromAgent();
@@ -213,6 +215,7 @@ async function loadBootstrap() {
 
 function handleAgentEvent(event) {
   const agentState = agentClient.applyEvent(event);
+  chat.observeSyncEvent(event);
   switch (event.type) {
     case "connected":
       if (event.workspace) { workspace.setWorkspace(event.workspace); workspaceSwitcher.sync({ workspace: event.workspace }); }
@@ -236,7 +239,7 @@ function handleAgentEvent(event) {
     case "tool_execution_start": chat.toolStarted(event.toolCallId, event.toolName); break;
     case "tool_execution_update": chat.updateToolStatus(); break;
     case "tool_execution_end": chat.toolEnded(event.toolCallId); break;
-    case "workspace_turn_files": workspace.setTurnFiles({ involved: event.involved || [], modified: event.modified || [] }); chat.renderLiveAssistant(); break;
+    case "workspace_turn_files": workspace.setTurnFiles(event); chat.renderLiveAssistant(); break;
     case "workspace_changed": {
       if (event.renamed) { workspace.setWorkspace(event.workspace); workspaceSwitcher.sync({ workspace: event.workspace }); break; }
       const hadDraft = Boolean(el.promptInput.value.trim() || chat.imageCount());
@@ -256,7 +259,7 @@ function handleAgentEvent(event) {
     case "extension_ui_request": void chat.handleExtensionUi(event); break;
     case "agent_settled":
       chat.settle(agentState); chat.setRuntime("");
-      void Promise.all([refreshStateAndSessions(), chat.syncMessagesFromAgent(), workspace.refreshWorkspaceTreeIfOpen()]); break;
+      void Promise.all([refreshStateAndSessions(), workspace.refreshWorkspaceTreeIfOpen()]); break;
     case "agent_end": if (!event.willRetry) chat.setRuntime("正在收尾", "ready"); break;
     case "extension_error": showNotice(event.error || "扩展执行失败", true); break;
   }
@@ -272,10 +275,13 @@ function updateStateFromAgent(agentState) {
 }
 
 async function refreshStateAndSessions() {
+  const listCurrent = sessionService.beginListRead();
   try {
-    const [agentState, listed] = await Promise.all([agentClient.getState(), sessionService.list()]);
-    updateStateFromAgent(agentState || {}); sessions.renderSessions(listed);
-  } catch (error) { console.warn(error); }
+    const [synced, listed] = await Promise.all([sessionService.syncCurrent(), sessionService.list()]);
+    if (!synced.current()) return;
+    updateStateFromAgent(synced.state); if (synced.turnFiles) workspace.setTurnFiles(synced.turnFiles); chat.renderMessages(synced.messages, { forceScroll: false });
+    if (listCurrent()) sessions.renderSessions(listed);
+  } catch (error) { if (!error.staleResponse) console.warn(error); }
 }
 
 async function shutdownWorkbench() {

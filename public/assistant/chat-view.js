@@ -1,4 +1,5 @@
 import { repairToolOutputEncoding } from "/assistant/text-normalization.js?v=1";
+import { createSnapshotRecovery } from '../core/snapshot-recovery.js';
 import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
 import { createResponseFallback } from "../core/response-fallback.js";
 import { createImageAttachments, readFileAsDataUrl } from './image-attachments.js';
@@ -15,6 +16,7 @@ export function createChatView({
   showNotice,
   showError,
   getTurnFiles,
+  setTurnFiles = () => {},
   getScope = () => `${agentClient.state?.().workspace?.id || ''}:${agentClient.state?.().sessionId || ''}`,
   setWorkspaceOpen,
   previewWorkspaceFile,
@@ -26,11 +28,16 @@ export function createChatView({
   const attachments = createImageAttachments({ state, input: el.imageInput, container: el.attachments, getScope, showError });
   const addImages = attachments.add, renderAttachments = attachments.render, clearImages = attachments.clear;
   const historyWindow = createMessageWindow();
+  const captureLiveContext = () => agentClient?.captureContext?.({ allowTransition: true }) || (() => true);
+  const snapshotRecovery = createSnapshotRecovery({ sync: syncMessagesFromAgent, captureContext: captureLiveContext });
   const responseFallback = createResponseFallback({
     readSnapshot: (options) => agentClient.getSnapshot(options),
     lastEventAt: () => state.lastAgentEventAt || 0,
     applySnapshot: (snapshot) => {
+      if (snapshot.current?.() === false) return;
+      agentClient.applyAgentState(snapshot.state || {});
       updateStateFromAgent(snapshot.state || {});
+      if (snapshot.turnFiles) setTurnFiles(snapshot.turnFiles);
       if (Array.isArray(snapshot.messages)) renderMessages(snapshot.messages, { forceScroll: false });
     },
   });
@@ -60,9 +67,13 @@ function loadEarlierMessages(force = false) {
 }
 
 function createLiveAssistant(message) {
+  if (state.live?.current?.() === false) {
+    if (state.live.renderFrame) cancelAnimationFrame(state.live.renderFrame);
+    state.live.node.remove(); state.live = null;
+  }
   if (state.live?.node?.isConnected) return;
   const node = createMessageShell("assistant");
-  state.live = { node, bubble: node.querySelector(".bubble"), text: "", thinking: "", tools: new Map(), snapshot: message, renderFrame: null };
+  state.live = { node, bubble: node.querySelector(".bubble"), text: "", thinking: "", tools: new Map(), snapshot: message, renderFrame: null, current: captureLiveContext() };
   el.messages.append(node);
   const rendered = message?.content?.length ? renderAssistantContent(state.live.bubble, message.content) : 0;
   if (!rendered) state.live.bubble.append(createAssistantStatus("正在思考…", "pending"));
@@ -71,7 +82,7 @@ function createLiveAssistant(message) {
 }
 
 function applyDelta(delta) {
-  if (!state.live) createLiveAssistant({ role: "assistant", content: [] });
+  createLiveAssistant({ role: "assistant", content: [] });
   if (!state.live) return;
   if (delta.type === "text_delta") state.live.text += delta.delta || "";
   if (delta.type === "text_end" && typeof delta.content === "string") state.live.text = delta.content;
@@ -150,7 +161,9 @@ function finalizeMessageContent(message) {
 }
 
 function renderMessages(messages, options = {}) {
+  if (!snapshotRecovery.canRender()) return;
   if (execution && options.forceScroll === false) execution.change(() => renderMessagesContent(messages, options)); else renderMessagesContent(messages, options);
+  snapshotRecovery.recovered();
 }
 function renderMessagesContent(messages, { forceScroll = true } = {}) {
   execution?.setMessages(messages, state.running);
@@ -371,8 +384,11 @@ async function compactSession() {
 async function syncMessagesFromAgent() {
   try {
     const data = await sessionService.syncCurrent();
+    if (!data.current()) return;
+    updateStateFromAgent(data.state);
+    if (data.turnFiles) setTurnFiles(data.turnFiles);
     renderMessages(data.messages, { forceScroll: false });
-  } catch (error) { console.warn("同步消息失败", error); }
+  } catch (error) { if (!error.staleResponse) { snapshotRecovery.recovered(); console.warn("同步消息失败", error); } }
 }
 
 function startResponseFallback() { responseFallback.start(); }
@@ -451,5 +467,5 @@ function scrollBottom(behavior = "auto", force = false) {
   function toolStarted(id, name) { state.activeTools.set(id, displayToolName(name || "tool")); updateToolStatus(); }
   function toolEnded(id) { state.activeTools.delete(id); updateToolStatus(); }
   function imageCount() { return state.images.length; }
-  return { loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToMessageBottom = false; scrollEpoch += 1; }, isRunning, isStreaming, setRuntimeState, setLastAgentEventAt, settle, toolStarted, toolEnded, imageCount, createLiveAssistant, applyDelta, scheduleLiveAssistantRender, renderLiveAssistant, finalizeMessage, renderMessages, createMessageNode, appendTurnFilesCard, createMessageShell, renderAssistantContent, createAssistantFallback, createAssistantStatus, displayToolName, createToolCard, sendPrompt, compactSession, syncMessagesFromAgent, startResponseFallback, stopResponseFallback, addImages, renderAttachments, clearImages, readFileAsDataUrl, handleExtensionUi, clearWorkspaceDraft, messageText, repairToolOutputEncoding, updateControls, updateToolStatus, setRuntime, resizePrompt, scrollBottom };
+  return { observeSyncEvent: snapshotRecovery.event, loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToMessageBottom = false; scrollEpoch += 1; }, isRunning, isStreaming, setRuntimeState, setLastAgentEventAt, settle, toolStarted, toolEnded, imageCount, createLiveAssistant, applyDelta, scheduleLiveAssistantRender, renderLiveAssistant, finalizeMessage, renderMessages, createMessageNode, appendTurnFilesCard, createMessageShell, renderAssistantContent, createAssistantFallback, createAssistantStatus, displayToolName, createToolCard, sendPrompt, compactSession, syncMessagesFromAgent, startResponseFallback, stopResponseFallback, addImages, renderAttachments, clearImages, readFileAsDataUrl, handleExtensionUi, clearWorkspaceDraft, messageText, repairToolOutputEncoding, updateControls, updateToolStatus, setRuntime, resizePrompt, scrollBottom };
 }

@@ -1,10 +1,18 @@
+import { MAX_UI_RESPONSE_BYTES } from '../ui-event-payloads.mjs';
 import { assertAllowedAgentCommand } from "../../lib/agent-commands.mjs";
 import { MAX_PROMPT_JSON_BYTES, validatePromptPayload } from '../../public/core/prompt-images.js';
 import { mutationError } from '../../lib/task-writer.mjs';
-import { assertSecureJsonMutation, json, readJsonBody } from "../response.mjs";
+import { assertLocalRequest, assertSecureJsonMutation, json, readJsonBody } from "../response.mjs";
 
 export function registerAgentRoutes(router) {
   router.get("/api/agent/events", (req, res, _url, _match, context) => context.openAgentEventStream(req, res));
+
+  router.get("/api/agent/ui-payload", (req, res, url, _match, context) => {
+    assertLocalRequest(req, context.config);
+    context.assertActiveWorkspace(url.searchParams.get("workspaceId"));
+    const runtime = context.switchCandidateRuntime || context.piRuntime;
+    json(res, 200, context.uiEventPayloads.get(url.searchParams.get('token'), runtime, context.workspaceEpoch, url.searchParams.get('workspaceId')));
+  });
 
   router.get("/api/agent/receipt", (_req, res, url, _match, context) => {
     json(res, 200, context.promptReceipts.get(url.searchParams.get("requestId")));
@@ -15,7 +23,7 @@ export function registerAgentRoutes(router) {
     if (context.piAdmin.maintenanceActive) return json(res, 409, { error: "配置维护中，请稍后重试" });
     const messages = url.searchParams.get("messages") === "1";
     if (messages && !context.piRuntime.running) await context.ensureActiveStarted();
-    json(res, 200, context.piRuntime.snapshot({ messages, since: url.searchParams.get("since") }));
+    json(res, 200, { ...context.piRuntime.snapshot({ messages, since: url.searchParams.get("since") }), turnFiles: context.turnFileSnapshot() });
   });
 
   router.get("/api/agent/bootstrap", async (_req, res, url, _match, context) => {
@@ -48,7 +56,7 @@ export function registerAgentRoutes(router) {
     assertSecureJsonMutation(req, context.config);
     const body = assertAllowedAgentCommand(await readJsonBody(req, MAX_PROMPT_JSON_BYTES));
     if (body.type === 'prompt') validatePromptPayload(body);
-    else if (Buffer.byteLength(JSON.stringify(body), 'utf8') > 1024 * 1024) throw mutationError(413, '请求内容过大');
+    else if (Buffer.byteLength(JSON.stringify(body), 'utf8') > (body.type === 'extension_ui_response' ? MAX_UI_RESPONSE_BYTES : 1024 * 1024)) throw mutationError(413, '请求内容过大');
     const uiResponse = body.type === "extension_ui_response";
     if (!uiResponse && (context.workspaceSwitching || context.piAdmin.maintenanceActive)) {
       return json(res, 409, { error: "工作区或配置正在切换，请稍后重试" });
@@ -61,7 +69,7 @@ export function registerAgentRoutes(router) {
     const result = body.type === "prompt" && body.requestId
       ? await context.promptReceipts.submit(body.requestId, receiptPayload, () => runtime.send(body))
       : await runtime.send(body);
-    json(res, 200, { ok: true, data: result });
+    json(res, 200, { ok: true, data: body.type === "get_messages" ? { ...result, turnFiles: context.turnFileSnapshot() } : result });
   });
 
   router.post("/api/agent/new", async (req, res, _url, _match, context) => {

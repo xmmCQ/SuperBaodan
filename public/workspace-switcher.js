@@ -1,4 +1,4 @@
-export function createWorkspaceSwitcher({ trigger, api, uiDialogs, showPathTooltip = true, hasDraft = () => false, getDraftWarning = () => '切换工作区将清空当前未发送的内容。', clearDraft = () => {}, onActivated = async () => {}, onError = console.error }) {
+export function createWorkspaceSwitcher({ trigger, api, uiDialogs, showPathTooltip = true, hasDraft = () => false, getDraftWarning = () => '切换工作区将清空当前未发送的内容。', clearDraft = () => {}, onActivating = () => {}, onActivated = async () => {}, onError = console.error }) {
   let data = { activeWorkspaceId: null, items: [] };
   const manager = buildManagerDialog();
   const picker = buildPickerDialog();
@@ -94,14 +94,17 @@ export function createWorkspaceSwitcher({ trigger, api, uiDialogs, showPathToolt
       if (!confirmed) return;
     }
     manager.dialog.classList.add("busy");
+    let finishTransition = onActivating();
     try {
       const result = await api(`/api/workspaces/${encodeURIComponent(item.id)}/activate`, { method: "POST", body: JSON.stringify({}) });
+      finishTransition?.();
+      finishTransition = null;
       clearDraft();
       sync({ workspace: result.workspace });
       manager.dialog.close();
       await onActivated(result);
     } catch (error) { onError(error); }
-    finally { manager.dialog.classList.remove("busy"); }
+    finally { finishTransition?.(); manager.dialog.classList.remove("busy"); }
   }
 
   async function renameWorkspace(item) {

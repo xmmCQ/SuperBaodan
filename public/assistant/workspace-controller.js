@@ -250,7 +250,10 @@ function scheduleWorkspaceReload(message = "") {
     state.workspace = workspace; if (workspace) el.workspacePanelTitle.textContent = workspace.name;
   }
   function workspace() { return state.workspace; }
-  function setTurnFiles(files) { state.turnFiles = files || { involved: [], modified: [] }; renderTurnFiles(); }
+  function setTurnFiles(files) {
+    if (!Array.isArray(files?.involved) || !Array.isArray(files?.modified)) return;
+    state.turnFiles = { involved: files.involved, modified: files.modified }; renderTurnFiles();
+  }
   function turnFiles() { return state.turnFiles; }
   return { setWorkspace, workspace, setTurnFiles, turnFiles, toggleWorkspace, setWorkspaceOpen, refreshWorkspaceTreeIfOpen, loadWorkspaceTree, uploadWorkspaceFiles, renderTreeEntries, searchWorkspaceFiles, renderWorkspaceSearchResults, selectWorkspaceFile, previewWorkspaceFile, renderTurnFiles, handlePromptInput, insertFileReference, scheduleWorkspaceReload };
 }

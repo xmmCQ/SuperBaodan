@@ -7,6 +7,38 @@ export function createSessionService({
 } = {}) {
   if (!agentClient) throw new TypeError("agentClient不能为空");
 
+  let mutationSequence = 0, listSequence = 0, mutationTail = null;
+  function beginListRead() {
+    const sequence = ++listSequence, context = agentClient.captureContext?.() || (() => true);
+    return () => sequence === listSequence && context();
+  }
+  async function mutate(url, options) {
+    const sequence = ++mutationSequence, workspaceId = getWorkspaceId();
+    const workspaceCurrent = agentClient.captureWorkspace?.() || (() => workspaceId === getWorkspaceId());
+    const finish = agentClient.beginTransition?.();
+    const stale = () => Object.assign(new Error('会话操作响应已过期'), { staleResponse: true });
+    const execute = async () => {
+      if (!workspaceCurrent()) throw stale();
+      return request(url, options);
+    };
+    // Queue in user intent order, including after failures. Invalidate reads
+    // when enqueued, but never send a queued operation into another workspace.
+    const flight = mutationTail ? mutationTail.catch(() => {}).then(execute) : execute();
+    mutationTail = flight;
+    try {
+      const result = await flight;
+      if (sequence !== mutationSequence || !workspaceCurrent()) throw stale();
+      return result;
+    } catch (error) {
+      if (sequence !== mutationSequence || !workspaceCurrent()) throw stale();
+      if (!error.staleResponse) error.refreshRequired = () => sequence === mutationSequence && workspaceCurrent();
+      throw error;
+    } finally {
+      if (mutationTail === flight) mutationTail = null;
+      finish?.();
+    }
+  }
+
   async function list(options = {}) {
     const data = await request(workspaceUrl("/api/sessions", getWorkspaceId()), { cache: "no-store", ...options });
     return data.sessions || [];
@@ -17,7 +49,7 @@ export function createSessionService({
   }
 
   function create(options = {}) {
-    return request("/api/agent/new", {
+    return mutate("/api/agent/new", {
       method: "POST",
       body: JSON.stringify(workspacePayload({}, getWorkspaceId())),
       ...options,
@@ -25,7 +57,7 @@ export function createSessionService({
   }
 
   function activate(path, options = {}) {
-    return request("/api/sessions/activate", {
+    return mutate("/api/sessions/activate", {
       method: "POST",
       body: JSON.stringify(workspacePayload({ path }, getWorkspaceId())),
       ...options,
@@ -41,7 +73,7 @@ export function createSessionService({
   }
 
   function remove(path, options = {}) {
-    return request("/api/sessions", {
+    return mutate("/api/sessions", {
       method: "DELETE",
       body: JSON.stringify(workspacePayload({ path }, getWorkspaceId())),
       ...options,
@@ -49,10 +81,13 @@ export function createSessionService({
   }
 
   async function syncCurrent() {
-    const [state, result] = await Promise.all([agentClient.getState(), agentClient.getMessages()]);
+    const current = agentClient.beginRead?.() || (() => true);
+    const assertCurrent = () => { if (!current()) throw Object.assign(new Error('对话同步响应已过期'), { staleResponse: true }); };
+    const [state, result] = await Promise.all([agentClient.getState(), agentClient.getMessages()]).catch(error => { assertCurrent(); throw error; });
+    assertCurrent();
     agentClient.applyAgentState(state || {});
-    return { state: state || {}, messages: result?.messages || [] };
+    return { state: state || {}, messages: result?.messages || [], turnFiles: result?.turnFiles, current };
   }
 
-  return { list, search, create, activate, rename, remove, syncCurrent };
+  return { beginListRead, list, search, create, activate, rename, remove, syncCurrent };
 }
