@@ -45,7 +45,7 @@ test('共享玻璃表面覆盖静态动态浮层，嵌套仅保留最上层遮�
   assert.equal(preview.background, 'rgba(255, 255, 255, 0.35)');
   assert.ok(preview.filter.includes('20px'));
   assert.equal(await browser.evaluate("getComputedStyle(taskSummaryDialog,'::backdrop').backgroundColor"), 'rgba(10, 10, 10, 0.08)');
-  assert.equal(await browser.evaluate("getComputedStyle(taskSummaryDialog.querySelector('header')).backgroundColor"), 'rgba(255, 255, 255, 0.12)');
+  assert.equal(await browser.evaluate("getComputedStyle(taskSummaryDialog.querySelector('header')).backgroundColor"), 'rgba(0, 0, 0, 0)');
   await browser.evaluate('taskSummaryDialog.close()');
   await browser.navigate(base + '/assistant.html');
   await browser.waitFor("modelPickerButton.textContent.includes('GPT Test')");
@@ -54,6 +54,7 @@ test('共享玻璃表面覆盖静态动态浮层，嵌套仅保留最上层遮�
   await browser.evaluate("modelPickerPanel.classList.add('hidden'); settingsButton.click()");
   await browser.waitFor("settingsDialog.dataset.glassShade === 'active'");
   await glass('#settingsDialog', 'large');
+  assert.equal(await browser.evaluate("getComputedStyle(settingsDialog.querySelector('.dialog-head')).backgroundColor"), 'rgba(0, 0, 0, 0)');
   assert.equal(await browser.evaluate('getComputedStyle(settingsDialog).fontSize'), '13px');
   assert.equal(await browser.evaluate('getComputedStyle(closeSettings).width'), '32px');
   assert.equal(await browser.evaluate("getComputedStyle(settingsDialog.querySelector('.settings-tabs button')).fontSize"), '13px');

@@ -32,9 +32,13 @@ html:root body .modal-backdrop[data-glass-shade="active"] { background: var(--gl
 /* Translucent chrome; preserve input/editor backgrounds and semantic states. */
 html:root body [data-glass-surface] > header,
 html:root body [data-glass-surface] :is(.dialog-head,.ui-dialog-head,.workspace-switcher-head,.history-drawer-header,.modal-heading,.ui-dialog-actions,.dialog-actions,.modal-actions,.workspace-switcher-toolbar,.workspace-picker-footer) {
-  background-color: rgba(255,255,255,.12);
+  background: transparent;
   border-color: rgba(255,255,255,.5);
 }
+/* No extra colored strips on editor labels or settings navigation. */
+html:root body [data-glass-surface] :is(.settings-tabs,.ui-dialog-editor-pane-label,.wd-toolbar,.wd-footer) { background: transparent; }
+html:root body [data-glass-surface] :is(.ui-dialog-editor-split,.ui-dialog-editor-pane,.ui-dialog-editor-preview,.config-card,.skills-layout,.skills-sidebar,.skills-detail,.provider-card,.provider-more,.daily-record-preview) { background-color: #fff; }
+html:root body [data-glass-surface] :is(input:not([type=checkbox]):not([type=radio]),textarea,select) { background-color: rgba(255,255,255,.92); }
 html:root body [data-glass-surface] .task-card { background: rgba(255,255,255,.92); }
 #taskSummaryDialog .task-summary-body { background: transparent; }
 #taskSummaryDialog #taskSummaryNotice { color: #334155; }
@@ -50,5 +54,6 @@ html:root body [data-glass-surface] .task-card { background: rgba(255,255,255,.9
   }
   html:root body [data-glass-surface] > header,
   html:root body [data-glass-surface] :is(.dialog-head,.ui-dialog-head,.workspace-switcher-head,.history-drawer-header,.modal-heading,.ui-dialog-actions,.dialog-actions,.modal-actions,.workspace-switcher-toolbar,.workspace-picker-footer,.task-card) { background: Canvas; border-color: CanvasText; }
+  html:root body [data-glass-surface] :is(.settings-tabs,.ui-dialog-editor-pane-label,.wd-toolbar,.wd-footer,.ui-dialog-editor-split,.ui-dialog-editor-pane,.ui-dialog-editor-preview,.config-card,.skills-layout,.skills-sidebar,.skills-detail,.provider-card,.provider-more,.daily-record-preview,input,textarea,select) { background-color: Canvas; color: CanvasText; }
   #taskSummaryDialog #taskSummaryNotice { color: CanvasText; }
 }

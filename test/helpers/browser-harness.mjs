@@ -78,6 +78,18 @@ export async function launchBrowser({ width, height } = {}) {
     },
     evaluate: connection.evaluate,
     waitFor: connection.waitFor,
+    async dragPointer(from, to) {
+      await connection.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y });
+      await connection.command('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 });
+      try {
+        for (let step = 1; step <= 12; step++) {
+          await connection.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x + (to.x - from.x) * step / 12, y: from.y + (to.y - from.y) * step / 12, button: 'left', buttons: 1 });
+          await new Promise(resolve => setTimeout(resolve, 30));
+        }
+      } finally {
+        await connection.command('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
+      }
+    },
     async close() {
       await connection.command("Browser.close").catch(() => {});
       connection.close();

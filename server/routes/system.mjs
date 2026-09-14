@@ -34,6 +34,30 @@ export function registerSystemRoutes(router) {
     setTimeout(() => void context.shutdown(), 150).unref();
   });
 
+  router.get('/api/work-documents', async (req, res, _url, _match, context) => {
+    assertLocalRequest(req, context.config); json(res, 200, await context.workDocuments.read());
+  });
+  router.put('/api/work-documents', async (req, res, _url, _match, context) => {
+    assertSecureJsonMutation(req, context.config); json(res, 200, await context.workDocuments.save(await readJsonBody(req)));
+  });
+  router.post('/api/work-documents/remove', async (req, res, _url, _match, context) => {
+    assertSecureJsonMutation(req, context.config); json(res, 200, await context.workDocuments.remove(await readJsonBody(req)));
+  });
+  router.post('/api/work-documents/pick-file', async (req, res, _url, _match, context) => {
+    assertSecureJsonMutation(req, context.config); await readJsonBody(req);
+    const controller = new AbortController();
+    const cancel = () => { if (!res.writableEnded) controller.abort(); };
+    res.once('close', cancel);
+    try {
+      const result = await context.workDocuments.chooseFile({ signal: controller.signal });
+      if (!res.destroyed) json(res, 200, result);
+    } catch (error) { if (!res.destroyed) throw error; }
+    finally { res.off('close', cancel); }
+  });
+  router.post('/api/work-documents/open', async (req, res, _url, _match, context) => {
+    assertSecureJsonMutation(req, context.config); json(res, 200, await context.workDocuments.open(await readJsonBody(req)));
+  });
+
   router.get('/api/apps/config', async (req, res, _url, _match, context) => {
     assertLocalRequest(req, context.config);
     json(res, 200, await context.workApps.read());

@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { createSmokeServer } from './helpers/smoke-server.mjs';
+import { launchBrowser, edgeAvailable } from './helpers/browser-harness.mjs';
+
+test('手动新建入口可浏览选择文件，保留自定义名称，取消选择不改草稿', { timeout: 20000 }, async t => {
+  if (!edgeAvailable()) return t.skip('需要 Edge');
+  const fixture = await createSmokeServer(); let browser;
+  t.after(async () => { try { await browser?.close(); } finally { await fixture.close(); } });
+  const file = path.join(fixture.root, '测试文件.txt'); await fs.writeFile(file, 'original');
+  fixture.state.workDocuments.pick = async () => ({ cancelled: false, path: file });
+  browser = await launchBrowser({ width: 1600, height: 1000 });
+  await browser.navigate(`http://127.0.0.1:${fixture.port}/`); await browser.waitFor("!document.documentElement.classList.contains('app-loading')");
+  await browser.evaluate('workDocumentsButton.click()'); await browser.waitFor("!document.querySelector('.wd-toolbar .wd-primary').disabled");
+  await browser.evaluate("document.querySelector('.wd-toolbar .wd-primary').click()");
+  await browser.evaluate("document.querySelector('.wd-editor [aria-label=文档名称]').value='我的工作资料';document.querySelector('.wd-browse-file').click()");
+  await browser.waitFor("document.querySelector('.wd-picker-status').textContent.includes('已选择')");
+  assert.equal(await browser.evaluate("document.querySelector('.wd-editor [aria-label=文档名称]').value"), '我的工作资料');
+  assert.equal((await browser.evaluate("document.querySelector('.wd-editor [aria-label=文件路径或网址]').value")).toLowerCase(), file.toLowerCase());
+  fixture.state.workDocuments.pick = async () => ({ cancelled: true });
+  await browser.evaluate("document.querySelector('.wd-browse-file').click()"); await browser.waitFor("document.querySelector('.wd-picker-status').textContent.includes('已取消')");
+  assert.equal(await browser.evaluate("document.querySelector('.wd-editor [aria-label=文档名称]').value"), '我的工作资料');
+  await browser.evaluate("document.querySelector('.wd-editor form').requestSubmit()"); await browser.waitFor("!document.querySelector('.wd-editor[open]')");
+  const data = await fixture.state.workDocuments.read(); assert.equal(data.documents[0].name, '我的工作资料');
+  assert.equal(data.documents[0].target.toLowerCase(), file.toLowerCase()); assert.equal(await fs.readFile(file, 'utf8'), 'original');
+  fixture.state.workDocuments.pick = async () => ({ cancelled: false, path: file });
+  await browser.evaluate("document.querySelector('.wd-toolbar .wd-primary').click();document.querySelector('.wd-browse-file').click()");
+  await browser.waitFor("document.querySelector('.wd-picker-status').textContent.includes('已选择')");
+  assert.equal(await browser.evaluate("document.querySelector('.wd-editor [aria-label=文档名称]').value"), '测试文件.txt');
+  await browser.evaluate("const type=document.querySelector('.wd-editor [aria-label=类型]');type.value='url';type.dispatchEvent(new Event('change'))");
+  assert.equal(await browser.evaluate("document.querySelector('.wd-browse-file').hidden"), true);
+  await browser.evaluate("[...document.querySelectorAll('.wd-editor .wd-footer button')].find(b=>b.textContent==='取消').click()");
+  await browser.waitFor('uiDialog.open'); await browser.evaluate('uiDialogConfirm.click()');
+  await browser.waitFor("!document.querySelector('.wd-editor[open]')");
+  assert.deepEqual(browser.issues, []);
+});

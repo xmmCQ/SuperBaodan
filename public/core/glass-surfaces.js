@@ -1,7 +1,7 @@
 // Presentation only: classify known overlays and shade only the top modal.
 const LARGE = '.ui-dialog,.settings-dialog,.secret-dialog,.workspace-switcher-dialog,.workspace-picker-dialog,.task-summary-dialog,.modal,.chat-history-drawer,.vskill-drawer';
 const SMALL = '.model-picker-panel,.task-date-picker,.at-file-menu,.conversation-directory,.work-app-menu';
-const MODALS = 'dialog.ui-dialog,dialog.settings-dialog,dialog.secret-dialog,dialog.workspace-switcher-dialog,dialog.workspace-picker-dialog,dialog.task-summary-dialog,dialog.work-app-dialog,.modal-backdrop';
+const MODALS = 'dialog.ui-dialog,dialog.settings-dialog,dialog.secret-dialog,dialog.workspace-switcher-dialog,dialog.workspace-picker-dialog,dialog.task-summary-dialog,dialog.work-app-dialog,dialog.wd-dialog,dialog.wd-editor,.modal-backdrop';
 export function installGlassSurfaces() {
   const active = new Map();
   let sequence = 0;

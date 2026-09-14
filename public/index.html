@@ -15,11 +15,12 @@
   <link rel="stylesheet" href="/core/conversation-directory.css">
   <link rel="stylesheet" href="/home/card-order.css">
   <link rel="stylesheet" href="/home/holiday-marks.css">
-  <link rel="stylesheet" href="/home/work-apps.css?v=2">
+  <link rel="stylesheet" href="/home/work-apps.css?v=3">
+  <link rel="stylesheet" href="/home/work-documents.css?v=9">
   <link rel="stylesheet" href="/home/task-summary.css?v=5">
   <link rel="stylesheet" href="/core/search-input.css?v=1">
   <link rel="stylesheet" href="/home/responsive-layout.css?v=2">
-  <link rel="stylesheet" href="/core/glass-surfaces.css?v=4">
+  <link rel="stylesheet" href="/core/glass-surfaces.css?v=5">
 </head>
 <body aria-busy="true">
   <div class="app-loading-screen" role="status" aria-live="polite"><i aria-hidden="true"></i><span>工作台加载中……</span></div>
@@ -37,6 +38,7 @@
       <div class="quick-actions">
         <button id="workspaceSwitcher" class="workspace-trigger" type="button"><svg aria-hidden="true"><use href="/icons.svg?v=3#folder"></use></svg><span data-workspace-label>选择工作区</span><svg class="workspace-trigger-chevron" aria-hidden="true"><use href="/icons.svg?v=3#chevron-down"></use></svg></button>
         <button class="icon-action icon-accent tooltip-down" id="refreshButton" type="button" aria-label="刷新工作待办" data-tooltip="刷新工作待办"><svg aria-hidden="true"><use href="/icons.svg#refresh-cw"></use></svg></button>
+        <button class="icon-action icon-accent tooltip-down" id="workDocumentsButton" type="button" aria-label="工作文档" data-tooltip="工作文档"><svg aria-hidden="true"><use href="/icons.svg#file-text"></use></svg></button>
         <button class="icon-action icon-primary tooltip-down" id="openAppsButton" type="button" aria-label="打开工作软件" data-tooltip="打开工作软件"><svg aria-hidden="true"><use href="/icons.svg#grid-2x2"></use></svg></button>
         <button class="icon-action icon-danger tooltip-down" id="exitWorkbenchButton" type="button" aria-label="退出工作台" data-tooltip="退出工作台"><svg aria-hidden="true"><use href="/icons.svg#power"></use></svg></button>
       </div>

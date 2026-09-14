@@ -1,5 +1,6 @@
 import { createUiDialogController } from "/ui-dialog.js?v=5";
 import { createWorkApps } from './work-apps.js';
+import { createWorkDocuments } from './work-documents.js';
 import { setIconBusy } from "/icons.js?v=2";
 import { createWorkspaceSwitcher } from "/workspace-switcher.js?v=5";
 import { renderMarkdown } from "/markdown-renderer.js?v=2";
@@ -31,6 +32,7 @@ const uiDialogs = createUiDialogController({
 });
 
 createWorkApps({ trigger: el.openAppsButton, api, uiDialogs, toast, escapeHtml, openAll: openWorkApps });
+createWorkDocuments({ trigger: el.workDocumentsButton, api, uiDialogs });
 
 let homeChat;
 let vskills;

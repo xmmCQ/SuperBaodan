@@ -23,6 +23,8 @@ import { enqueueWorkspaceOperation } from './workspace-operations.mjs';
 
 const execFileAsync = promisify(execFile);
 
+import { WorkDocuments } from '../lib/work-documents.mjs';
+
 export async function createRuntimeContext(config) {
   const context = new RuntimeContext(config);
   await context.initialize();
@@ -32,6 +34,7 @@ export async function createRuntimeContext(config) {
 class RuntimeContext {
   constructor(config) {
     this.config = config;
+    this.workDocuments = new WorkDocuments({ filePath: config.workDocumentsFile || path.join(path.dirname(config.todoFile), 'work-documents.json') });
     this.workApps = new WorkApps({ filePath: config.workAppsFile || path.join(path.dirname(config.todoFile), 'work-apps.json'), launch: apps => this.launchWorkApps(apps) });
     this.lastGoodSource = null;
     this.taskMutationQueue = Promise.resolve();
@@ -384,6 +387,7 @@ class RuntimeContext {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
     this.uiEventPayloads.clear();
+    this.workDocuments.cancelPicker();
     this.shutdownPromise = (async () => {
       for (const client of this.eventClients) client.end();
       this.eventClients.clear();

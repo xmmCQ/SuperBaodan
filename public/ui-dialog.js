@@ -69,8 +69,22 @@ export function createUiDialogController(elements) {
     dialog.classList.toggle("large-editor", mode === "editor" && Boolean(options.large));
     dialog.classList.toggle("monospace-editor", mode === "editor" && Boolean(options.monospace));
     dialog.classList.toggle("markdown-preview-editor", hasPreview);
+    dialog.classList.toggle("compact-confirm", Boolean(options.compact));
     title.textContent = options.title || (mode === "confirm" ? "请确认" : "请输入");
     message.textContent = options.message || "";
+    if (options.emphasisText && message.textContent.includes(options.emphasisText)) {
+      const parts = message.textContent.split(options.emphasisText);
+      message.replaceChildren();
+      parts.forEach((part, index) => {
+        if (index) {
+          const emphasis = document.createElement("strong");
+          emphasis.className = "ui-dialog-danger-text";
+          emphasis.textContent = options.emphasisText;
+          message.append(emphasis);
+        }
+        message.append(document.createTextNode(part));
+      });
+    }
     message.classList.toggle("hidden", !options.message);
     field.replaceChildren();
     inputControl = null;

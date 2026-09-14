@@ -1,7 +1,8 @@
 import http from "node:http";
 import { WorkApps } from '../../lib/work-apps.mjs';
+import { WorkDocuments } from '../../lib/work-documents.mjs';
 import { readProjectPrompt, saveProjectPrompt } from '../../lib/project-prompt.mjs';
-import { readFile } from "node:fs/promises";
+import { readFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTempProject } from "./temp-project.mjs";
@@ -29,6 +30,8 @@ export async function createSmokeServer() {
     eventClients: new Set(),
   };
   state.workApps = new WorkApps({ filePath: temp.resolve('work-apps.json'), defaults: [{ id: 'fixture', name: '测试软件', path: 'C:\\Apps\\Test.exe', enabled: true, processes: [] }], launch: async apps => { state.operations.push(...apps.map(app => `app:open:${app.id}`)); return { results: apps.map(app => ({ name: app.name, status: 'started', message: '已发送启动请求' })) }; } });
+  state.documentRequests = [];
+  state.workDocuments = new WorkDocuments({ filePath: temp.resolve('work-documents.json'), pick: async () => ({ cancelled: true }), recycle: async file => { await rename(file, temp.resolve(`recycled-${path.basename(file)}`)); state.operations.push(`document:recycle:${file}`); }, launch: async file => { state.operations.push(`document:open:${file}`); } });
   const server = http.createServer((req, res) => void handle(req, res, state));
   await new Promise((resolve, reject) => server.listen(0, "127.0.0.1", resolve).once("error", reject));
   return {
@@ -102,6 +105,11 @@ async function handle(req, res, state) {
     if (req.method === "GET" && url.pathname === "/api/workspace/tree") return json(res, 200, tree(state));
     if (req.method === "GET" && url.pathname === "/api/workspace/search") return json(res, 200, { results: [...state.files].map(([name, content]) => ({ path: name, name, kind: "file", size: content.length, previewable: true })) });
     if (req.method === "GET" && url.pathname === "/api/workspace/preview") return preview(res, url, state);
+    if (req.method === 'GET' && url.pathname === '/api/work-documents') return json(res, 200, await state.workDocuments.read());
+    if (req.method === 'PUT' && url.pathname === '/api/work-documents') { const body = await readJson(req); state.documentRequests.push(body); return json(res, 200, await state.workDocuments.save(body)); }
+    if (req.method === 'POST' && url.pathname === '/api/work-documents/pick-file') { await readJson(req); return json(res, 200, await state.workDocuments.chooseFile()); }
+    if (req.method === 'POST' && url.pathname === '/api/work-documents/remove') return json(res, 200, await state.workDocuments.remove(await readJson(req)));
+    if (req.method === 'POST' && url.pathname === '/api/work-documents/open') return json(res, 200, await state.workDocuments.open(await readJson(req)));
     if (req.method === 'GET' && url.pathname === '/api/apps/config') return json(res, 200, await state.workApps.read());
     if (req.method === 'PUT' && url.pathname === '/api/apps/config') return json(res, 200, await state.workApps.save(await readJson(req)));
     if (req.method === 'POST' && url.pathname === '/api/apps/open') { const body = await readJson(req); return json(res, 200, await state.workApps.run(body.id, body.revision)); }

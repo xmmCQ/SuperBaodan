@@ -18,7 +18,14 @@ test('软件菜单与管理界面增删改、排序、启用和启动，刷新�
     assert.equal(await browser.evaluate(`getComputedStyle(workAppsDialog.querySelector(${JSON.stringify(selector)})).backgroundColor`), 'rgba(0, 0, 0, 0)');
   }
   await browser.evaluate("workAppsDialog.querySelector('[data-add]').click()");
-  await browser.evaluate(`(()=>{const row=workAppsDialog.querySelector('.work-app-list').lastElementChild;row.querySelector('[data-name]').value='新软件';row.querySelector('[data-path]').value='D:/Apps/New.exe';row.querySelector('[data-up]').click();workAppsDialog.querySelectorAll('[data-enabled]')[1].checked=false;})()`);
+  await browser.evaluate(`(()=>{const row=workAppsDialog.querySelector('.work-app-list').lastElementChild;row.querySelector('[data-name]').value='新软件';row.querySelector('[data-path]').value='D:/Apps/New.exe';window.softwareRows=[...workAppsDialog.querySelectorAll('.work-app-row')];})()`);
+  const points = await browser.evaluate(`(()=>{const rows=workAppsDialog.querySelectorAll('.work-app-row'),a=rows[1].querySelector('.wd-drag-handle').getBoundingClientRect(),b=rows[0].getBoundingClientRect();return {from:{x:a.left+a.width/2,y:a.top+a.height/2},to:{x:b.left+b.width/2,y:b.top+b.height/4}};})()`);
+  await browser.dragPointer(points.from, points.to);
+  await browser.waitFor("workAppsDialog.querySelector('[data-name]').value==='新软件'");
+  assert.equal(await browser.evaluate('softwareRows.every(row=>row.isConnected)'), true);
+  assert.equal((await fixture.state.workApps.read()).apps.length, 1);
+  assert.equal(await browser.evaluate("workAppsDialog.querySelector('[data-up],[data-down]')===null"), true);
+  await browser.evaluate("workAppsDialog.querySelectorAll('[data-enabled]')[1].checked=false");
   await browser.evaluate("workAppsDialog.querySelector('[data-run]').click()");
   assert.equal(await browser.evaluate("workAppsDialog.querySelector('.work-app-notice').textContent"), '请先保存配置，再启动软件');
   await browser.evaluate("workAppsDialog.querySelector('form').requestSubmit()");

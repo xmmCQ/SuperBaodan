@@ -1,3 +1,5 @@
+import { createDocumentSorter, documentDragHandle, reorderDocumentSlots } from './work-document-sort.js';
+
 export function createWorkApps({ trigger, api, uiDialogs, toast, escapeHtml: esc, openAll }) {
   const wrapper = document.createElement('div'); wrapper.className = 'work-app-launcher';
   trigger.before(wrapper); wrapper.append(trigger);
@@ -25,16 +27,34 @@ export function createWorkApps({ trigger, api, uiDialogs, toast, escapeHtml: esc
   const dirty = () => { collect(); return JSON.stringify(apps) !== original; };
   function menuClose() { menu.classList.add('hidden'); trigger.setAttribute('aria-expanded', 'false'); }
   function setBusy(value) { busy = value; fields.disabled = value; dialog.querySelector('[data-close]').disabled = value; }
+  const sorter = createDocumentSorter({
+    container: list,
+    enabled: () => dialog.open && !busy && !closing,
+    context: () => `${revision}|${apps.map(app => app.id).join(',')}`,
+    onMove: async (from, to, after) => {
+      await new Promise(requestAnimationFrame);
+      if (!dialog.open || busy || closing) return;
+      const source = [...list.children].find(row => row.dataset.id === from);
+      const target = [...list.children].find(row => row.dataset.id === to);
+      if (!source || !target) return;
+      collect();
+      if (!reorderDocumentSlots(apps, from, to, after)) return;
+      const scroll = list.scrollTop;
+      if (after) target.after(source); else target.before(source);
+      list.scrollTop = scroll;
+      notice.textContent = '顺序已调整，点击“保存配置”后生效';
+    },
+  });
   function render() {
+    sorter.cancel();
     const scroll = list.scrollTop;
-    list.innerHTML = apps.map((app, index) => `<article class="work-app-row" data-id="${esc(app.id)}">
+    list.innerHTML = apps.map(app => `<article class="work-app-row" data-id="${esc(app.id)}" data-sort-id="${esc(app.id)}">
       <div class="work-app-row-head"><input data-name required maxlength="40" value="${esc(app.name)}" aria-label="软件名称" placeholder="软件名称">
-        <button type="button" class="icon-action" data-up ${index === 0 ? 'disabled' : ''} aria-label="上移"><svg aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg></button>
-        <button type="button" class="icon-action work-app-down" data-down ${index === apps.length - 1 ? 'disabled' : ''} aria-label="下移"><svg aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg></button>
         <button type="button" class="icon-action" data-delete aria-label="删除软件"><svg aria-hidden="true"><use href="/icons.svg#trash-2"></use></svg></button></div>
       <input data-path required maxlength="514" value="${esc(app.path)}" aria-label="程序或快捷方式完整路径" placeholder="粘贴 .exe 或 .lnk 完整路径">
       <div class="work-app-row-foot"><label><input type="checkbox" data-enabled ${app.enabled ? 'checked' : ''}>参与一键打开</label><button type="button" class="work-app-button" data-run>启动</button></div>
     </article>`).join('') || '<p class="form-hint">尚未配置软件，点击下方添加。</p>';
+    for (const head of list.querySelectorAll('.work-app-row-head')) head.prepend(documentDragHandle('拖动调整软件顺序，保存配置后生效'));
     list.scrollTop = scroll; dialog.querySelector('[data-add]').disabled = apps.length >= 20;
   }
   async function open() {
@@ -57,6 +77,7 @@ export function createWorkApps({ trigger, api, uiDialogs, toast, escapeHtml: esc
   menu.querySelector('[data-manage-apps]').addEventListener('click', open);
   document.addEventListener('click', event => { if (!wrapper.contains(event.target)) menuClose(); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !menu.classList.contains('hidden')) { event.preventDefault(); event.stopImmediatePropagation(); menuClose(); trigger.focus(); } }, true);
+  dialog.addEventListener('close', sorter.cancel);
   dialog.addEventListener('cancel', event => { event.preventDefault(); void close(); });
   dialog.querySelector('[data-close]').addEventListener('click', close); dialog.querySelector('[data-cancel]').addEventListener('click', close);
   dialog.querySelector('[data-add]').addEventListener('click', () => {
@@ -73,9 +94,7 @@ export function createWorkApps({ trigger, api, uiDialogs, toast, escapeHtml: esc
       finally { setBusy(false); }
       return;
     }
-    if (button.hasAttribute('data-delete')) apps.splice(index, 1);
-    else { const next = index + (button.hasAttribute('data-up') ? -1 : 1); if (next < 0 || next >= apps.length) return; [apps[index], apps[next]] = [apps[next], apps[index]]; }
-    render();
+    if (button.hasAttribute('data-delete')) { apps.splice(index, 1); render(); }
   });
   form.addEventListener('submit', async event => {
     event.preventDefault(); if (busy) return; collect(); setBusy(true); notice.textContent = '正在保存…';
