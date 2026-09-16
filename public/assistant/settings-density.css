@@ -1,5 +1,11 @@
 /* Compact settings controls without shrinking the dialog or other surfaces. */
 #settingsDialog { font-size: 13px; line-height: 1.5; }
+/* Let the real header/tab heights determine the scroll area's remaining space. */
+#settingsDialog[open] { display: flex; flex-direction: column; }
+#settingsDialog > .dialog-head, #settingsDialog > .settings-tabs { flex: none; }
+#settingsDialog > .settings-tab { flex: 1; min-height: 0; height: auto; }
+/* Save controls occupy normal flow space, never float over form fields. */
+#settingsDialog .dialog-actions { position: static; bottom: auto; flex-shrink: 0; }
 #settingsDialog :is(button,input,select,textarea) { font-size: 13px; }
 #settingsDialog > .dialog-head > b { font-size: 16px; }
 #settingsDialog :is(h3,.skill-detail-heading h3) { font-size: 17px; line-height: 1.4; }
@@ -33,3 +39,9 @@
 #settingsDialog .skill-diagnostics { flex: none; max-height: 180px; overflow: auto; }
 #settingsDialog .skill-diagnostics summary { cursor: pointer; font-size: 12px; }
 #settingsDialog .skill-diagnostic-row { overflow-wrap: anywhere; }
+
+#settingsDialog #preferencesTab .preferences-fields { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+#settingsDialog #preferencesTab .preferences-fields label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-width: 0; gap: 8px; white-space: nowrap; }
+#settingsDialog #preferencesTab .preferences-fields select { min-width: 0; min-height: 32px; height: 32px; padding: 4px 10px; border: 1px solid #dfe2e7; border-radius: 9999px; font-size: 13px; line-height: 1.4; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+#settingsDialog #preferencesTab #defaultThinking { width: 140px; }
+#settingsDialog #preferencesTab .settings-scope-note { margin: 8px 0 18px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 12px; }

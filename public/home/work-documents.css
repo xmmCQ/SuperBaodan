@@ -45,6 +45,14 @@
 .wd-editor-fields label { display: grid; gap: 6px; font-size: 12px; color: #5f5f5f; min-width: 0; }
 .wd-editor input:not([type=checkbox]), .wd-editor select, .wd-toolbar input { width: 100%; min-height: 34px; box-sizing: border-box; padding: 7px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: white; color: #222; font: inherit; font-size: 13px; }
 .wd-browse-file { justify-self: start; }
+.wd-editor:has(.wd-browse-file) { width: min(480px, calc(100vw - 64px)); height: fit-content; padding: 20px; }
+.wd-editor:has(.wd-browse-file) form { gap: 10px; }
+.wd-editor:has(.wd-browse-file) .modal-heading { margin-bottom: 4px; }
+.wd-editor:has(.wd-browse-file) .wd-editor-fields { gap: 10px; }
+.wd-editor:has(.wd-browse-file) .wd-notice:empty,
+.wd-editor:has(.wd-browse-file) .wd-picker-status:empty { display: none; }
+.wd-editor:has(.wd-browse-file) .form-hint { margin: 0; }
+.wd-editor:has(.wd-browse-file) .wd-footer { margin-top: 4px; }
 .wd-picker-status { margin: 0; font-size: 12px; color: #5f5f5f; overflow-wrap: anywhere; }
 .wd-footer { display: flex; justify-content: flex-end; gap: 8px; }
 .wd-import.modal { width: min(900px, calc(100vw - 64px)); }
@@ -61,8 +69,7 @@
 .wd-import-row > input[type=checkbox] { margin: 0; justify-self: center; width: 16px; height: 16px; cursor: pointer; }
 .wd-import-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .wd-import-row label { gap: 3px; }
-.wd-import-row label:nth-of-type(3) { grid-column: 2; }
-.wd-import-row label:last-of-type { grid-column: 3 / -1; }
+.wd-import-row label:last-of-type { grid-column: 2 / -1; }
 .wd-import .wd-import-row input:not([type=checkbox]), .wd-import .wd-import-row select { min-height: 30px; padding: 5px 8px; font-size: 12px; }
 .wd-import-row.is-excluded { background: #e4e8ee; border-color: #c8d0da; }
 .wd-import-row.is-excluded label { color: #5f6b7b; }
@@ -74,7 +81,8 @@
   .wd-import-excluded { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 }
 .wd-import-summary, .wd-dialog .form-hint { margin: 0; font-size: 12px; color: #5f5f5f; }
-.wd-dialog :focus-visible, .wd-editor :focus-visible { outline: 2px solid #45515e; outline-offset: 2px; }
+.wd-dialog :focus-visible, .wd-editor :focus-visible,
+.wd-dialog :is(input, select, textarea):focus, .wd-editor :is(input, select, textarea):focus { outline: 2px solid #45515e; outline-offset: -2px; }
 
 :is(.wd-dialog,.work-app-dialog) .wd-drag-handle { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; min-width: 24px; min-height: 28px; padding: 3px; border: 0; border-radius: 6px; background: transparent; color: #9298a2; cursor: grab; }
 :is(.wd-dialog,.work-app-dialog) .wd-drag-handle svg { width: 12px; height: 18px; pointer-events: none; }
@@ -86,3 +94,18 @@
 .wd-drop-before::before, .wd-drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: #45515e; pointer-events: none; z-index: 1; }
 .wd-drop-before::before { top: 0; }
 .wd-drop-after::after { bottom: 0; }
+
+:is(.wd-dialog, .wd-editor) .wd-icon-button {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px;
+  width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0;
+  box-sizing: border-box; border: 1px solid transparent; border-radius: 9999px;
+  background: transparent; color: #45515e; vertical-align: middle;
+}
+:is(.wd-dialog, .wd-editor) .wd-icon-button[hidden] { display: none; }
+:is(.wd-dialog, .wd-editor) .wd-icon-button:hover:not(:disabled) { background: #f2f3f5; border-color: transparent; }
+:is(.wd-dialog, .wd-editor) .wd-icon-button.wd-primary { background: #0a0a0a; color: #fff; }
+:is(.wd-dialog, .wd-editor) .wd-icon-button.wd-primary:hover:not(:disabled) { background: #222; }
+:is(.wd-dialog, .wd-editor) .wd-icon-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+:is(.wd-dialog, .wd-editor) :is(.wd-icon-button, .wd-icon-label) svg { width: 16px; height: 16px; flex: 0 0 16px; pointer-events: none; }
+:is(.wd-dialog, .wd-editor) .wd-danger-action:hover:not(:disabled) { color: #b42318; background: #fef3f2; }
+.wd-category-menu > div { min-width: 116px; }

@@ -131,7 +131,6 @@ function renderConfigSelectors() {
   el.providerConfigSelect.replaceChildren();
   for (const key of Object.keys(state.modelsConfig?.providers || {})) el.providerConfigSelect.append(new Option(key, key, false, key === state.providerKey));
   if (!state.providerKey) {
-    el.providerConfigSelect.append(new Option("暂无供应商", ""));
     clearProviderForm(); clearModelForm(); return;
   }
   loadProviderForm();
@@ -266,6 +265,7 @@ function supportedThinkingLevels(model) {
 }
 
 function syncDefaultModelPreference(preferredLevel = el.defaultThinking.value) {
+  el.defaultModelSelect.title = el.defaultModelSelect.selectedOptions[0]?.textContent || '';
   const value = el.defaultModelSelect.value;
   const [provider, modelId] = value.split("||");
   const defaultKey = `${provider}/${modelId}`;

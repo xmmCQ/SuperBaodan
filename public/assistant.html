@@ -13,14 +13,14 @@
   <link rel="stylesheet" href="/core/session-search.css">
   <link rel="stylesheet" href="/core/reading-settings.css">
   <link rel="stylesheet" href="/core/reply-actions.css">
-  <link rel="stylesheet" href="/core/conversation-directory.css">
+  <link rel="stylesheet" href="/core/conversation-directory.css?v=2">
   <link rel="stylesheet" href="/core/execution-process.css">
   <link rel="stylesheet" href="/assistant/workspace-panel.css">
   <link rel="stylesheet" href="/assistant/floating-tools.css?v=2">
   <link rel="stylesheet" href="/core/search-input.css?v=1">
   <link rel="stylesheet" href="/assistant/project-prompt.css">
   <link rel="stylesheet" href="/core/glass-surfaces.css?v=5">
-  <link rel="stylesheet" href="/assistant/settings-density.css?v=2">
+  <link rel="stylesheet" href="/assistant/settings-density.css?v=4">
 </head>
 <body class="assistant-page">
   <div class="assistant-shell workspace-closed">
@@ -126,11 +126,11 @@
     <div class="dialog-head"><b>设置</b><button id="closeSettings" class="icon-action tooltip-left" type="button" aria-label="关闭设置" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div>
     <nav class="settings-tabs">
       <button data-settings-tab="accounts" class="active">模型配置</button>
-      <button data-settings-tab="custom">自定义模型（高级）</button>
       <button data-settings-tab="preferences">新对话默认设置</button>
       <button data-settings-tab="projectPrompt">项目提示词</button>
       <button data-settings-tab="skills">技能管理</button>
       <button data-settings-tab="reading">阅读设置</button>
+      <button data-settings-tab="custom">自定义模型（高级）</button>
     </nav>
     <section id="readingTab" class="settings-tab"></section>
     <section id="projectPromptTab" class="settings-tab"></section>
@@ -200,11 +200,11 @@
       <div class="dialog-actions"><button id="reloadModelsConfig">撤销更改</button><button id="saveModelsConfig" class="primary">保存配置</button></div>
     </section>
     <section id="preferencesTab" class="settings-tab">
-      <p class="settings-scope-note">以下设置只对新建对话生效，不会切换当前对话。当前对话请使用顶部的模型和思考等级。</p>
       <div class="field-grid preferences-fields">
-        <label class="span-2">新对话默认模型<select id="defaultModelSelect"></select></label>
-        <label>新对话默认思考等级<select id="defaultThinking"></select></label>
+        <label><span>默认模型</span><select id="defaultModelSelect"></select></label>
+        <label><span>思考等级</span><select id="defaultThinking"></select></label>
       </div>
+      <p class="settings-scope-note">仅对新对话生效，不影响当前对话。</p>
       <div class="model-preferences-heading">
         <h3>模型选择器中显示的模型</h3>
         <div class="model-selection-actions">

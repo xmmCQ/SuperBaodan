@@ -1,5 +1,37 @@
 export const node = (tag, text = '', className = '') => { const el = document.createElement(tag); el.textContent = text; el.className = className; return el; };
-export function button(text, action, className = '') { const el = node('button', text, className); el.type = 'button'; el.addEventListener('click', action); return el; }
+const actionIcons = {
+  '添加文档': 'file-plus', '导入 Markdown': 'upload', '关闭': 'x', '＋ 添加分类': 'folder-plus',
+  '编辑': 'pencil', '删除': 'trash-2', '浏览本地文件': 'folder-open', '重新读取目录版本': 'refresh-cw',
+  '重命名': 'pencil', '删除分类': 'trash-2',
+};
+const customPaths = {
+  'file-plus': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 12v6M9 15h6"/>',
+  'folder-plus': '<path d="M20 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2ZM12 10v6M9 13h6"/>',
+  'folder-open': '<path d="M3 20h16l3-12H9L7 6H2v12a2 2 0 0 0 2 2M2 6V4h6l2 2h9v2"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+};
+export function decorateDocumentAction(el, icon, label, withText = false) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+  if (customPaths[icon]) svg.innerHTML = customPaths[icon];
+  else {
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `/icons.svg?v=6#${icon}`); svg.append(use);
+  }
+  el.replaceChildren(svg);
+  if (withText) el.append(document.createTextNode(label));
+  el.classList.add(withText ? 'wd-icon-label' : 'wd-icon-button');
+  if (icon === 'trash-2') el.classList.add('wd-danger-action');
+  el.title = label; el.setAttribute('aria-label', label);
+  return el;
+}
+export function button(text, action, className = '') {
+  const el = node('button', text, className); el.type = 'button'; el.addEventListener('click', action);
+  if (actionIcons[text]) decorateDocumentAction(el, actionIcons[text], text.replace(/^＋ /, ''), ['重命名', '删除分类'].includes(text));
+  return el;
+}
 export function field(container, label, value = '', options = {}) {
   const wrap = node('label', label), input = node(options.choices ? 'select' : 'input');
   if (options.choices) for (const [id, name] of options.choices) input.append(new Option(name, id));

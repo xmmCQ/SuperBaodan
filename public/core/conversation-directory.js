@@ -50,13 +50,13 @@ export function buildConversationOutline(messages, parse, cache = new Map(), { s
 export function createConversationDirectory({ button, container, getScope, loadEarlier, pauseFollow, onLatest, onNotice = () => {}, splitTextBlocks = false }) {
   const panel = document.createElement("nav"); panel.className = "conversation-directory hidden";
   panel.id = "conversationDirectory"; panel.setAttribute("aria-label", "对话目录");
-  panel.innerHTML = '<header><strong>对话目录</strong><button type="button" data-latest>回到最新回复</button><button type="button" data-close aria-label="关闭对话目录">×</button></header><div class="conversation-directory-list"></div>';
+  panel.innerHTML = '<header><strong>对话目录</strong><button type="button" data-latest title="回到最新回复" aria-label="回到最新回复"><svg aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg></button><button type="button" data-close title="关闭对话目录" aria-label="关闭对话目录"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></header><div class="conversation-directory-list"></div>';
   const floatingTools = button.closest(".chat-floating-tools");
   (floatingTools || document.body).append(panel);
   const list = panel.querySelector(".conversation-directory-list");
   button.setAttribute("aria-controls", panel.id); button.setAttribute("aria-expanded", "false");
   let messages = [], turns = [], scope, open = false, dirty = true, frame = null, jump = 0;
-  const cache = new Map();
+  const cache = new Map(), expandedTurns = new Set();
   const engine = globalThis.markdownit?.({ html: false });
   const parse = engine ? (text) => engine.parse(text, {}) : null;
   function cancelJump() { jump += 1; delete container.dataset.directoryJump; }
@@ -135,17 +135,29 @@ export function createConversationDirectory({ button, container, getScope, loadE
       const question = document.createElement("button"); question.type = "button";
       question.dataset.turnIndex = turn.index; question.dataset.directoryKey = `turn-${turn.index}`;
       question.className = "directory-question"; question.title = turn.label;
-      question.textContent = `${order + 1}. ${turn.label}`;
+      const number = document.createElement('span'); number.className = 'directory-number'; number.textContent = String(order + 1).padStart(2, '0'); number.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span'); label.className = 'directory-question-label'; label.textContent = turn.label;
+      question.append(number, label);
       question.addEventListener("click", () => void go(turn)); item.append(question);
+      let sections;
+      if (turn.headings.length) {
+        sections = document.createElement('details'); sections.className = 'directory-sections'; sections.open = expandedTurns.has(turn.index);
+        const summary = document.createElement('summary'); summary.textContent = '回复小节'; summary.dataset.directoryKey = `sections-${turn.index}`;
+        sections.append(summary); item.append(sections);
+        sections.addEventListener('toggle', () => {
+          if (!sections.isConnected) return;
+          if (sections.open) expandedTurns.add(turn.index); else expandedTurns.delete(turn.index);
+        });
+      }
       for (const heading of turn.headings) {
         const entry = document.createElement("button"); entry.type = "button"; entry.className = `directory-heading level-${heading.level}`;
         entry.dataset.directoryKey = `heading-${heading.index}-${heading.ordinal}`;
         entry.textContent = heading.text; entry.title = heading.text;
-        entry.addEventListener("click", () => void go(heading)); item.append(entry);
+        entry.addEventListener("click", () => void go(heading)); sections.append(entry);
       }
       list.append(item);
     });
-    if (focused) [...list.querySelectorAll("button")].find((node) => node.dataset.directoryKey === focused)?.focus({ preventScroll: true });
+    if (focused) [...list.querySelectorAll("[data-directory-key]")].find((node) => node.dataset.directoryKey === focused)?.focus({ preventScroll: true });
     list.scrollTop = scroll; scheduleActive();
   }
   function revealActive() {
@@ -169,8 +181,8 @@ export function createConversationDirectory({ button, container, getScope, loadE
   return {
     update(next) {
       const current = getScope();
-      if (current !== scope) { scope = current; close(); cache.clear(); list.scrollTop = 0; }
-      else if (next.length < messages.length || (messages.length && next.length && (messages[0].role !== next[0].role || messages[0].timestamp !== next[0].timestamp || messageBodyText(messages[0]) !== messageBodyText(next[0])))) { cancelJump(); cache.clear(); }
+      if (current !== scope) { scope = current; close(); cache.clear(); expandedTurns.clear(); list.scrollTop = 0; }
+      else if (next.length < messages.length || (messages.length && next.length && (messages[0].role !== next[0].role || messages[0].timestamp !== next[0].timestamp || messageBodyText(messages[0]) !== messageBodyText(next[0])))) { cancelJump(); cache.clear(); expandedTurns.clear(); }
       messages = next; dirty = true; if (open) render();
     },
     dispose() { close(); if (frame != null) cancelAnimationFrame(frame); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", key); container.removeEventListener("scroll", scheduleActive); container.removeEventListener("wheel", cancelJump); window.removeEventListener("resize", position); panel.remove(); },

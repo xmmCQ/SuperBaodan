@@ -37,7 +37,19 @@ test('文档弹窗懒加载、分类/入口管理、搜索、打开防重及只�
   await click('.wd-categories button', '＋ 添加分类'); await fill('分类名称', '业务资料'); await save();
   await click('.wd-toolbar button', '添加文档'); await fill('文档名称', '本地资料'); await fill('文件路径或网址', file);
   const categoryId = (await fixture.state.workDocuments.read()).categories.find(c => c.name === '业务资料').id;
-  await fill('分类', categoryId); await save();
+  await fill('分类', categoryId);
+  // Force mouse/keyboard focus states: headless Edge may keep the page inactive.
+  for (const pseudo of [['focus'], ['focus', 'focus-visible']]) {
+    await browser.forcePseudoState('.wd-editor[open] select', pseudo);
+    const focusRing = await browser.evaluate(`(async()=>{
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const style=getComputedStyle(document.querySelector('.wd-editor[open] select'));
+      return {width:style.outlineWidth,offset:style.outlineOffset};
+    })()`);
+    assert.deepEqual(focusRing, {width:'2px',offset:'-2px'});
+  }
+  await browser.forcePseudoState('.wd-editor[open] select', []);
+  await save();
   await browser.evaluate("const b=document.querySelector('.wd-doc-name');b.click();b.click()");
   await browser.waitFor("document.querySelector('.wd-notice').textContent.includes('已交给系统')");
   assert.equal(fixture.state.operations.filter(s => s.startsWith('document:open:')).length, 1);

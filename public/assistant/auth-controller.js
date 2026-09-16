@@ -142,19 +142,17 @@ function renderProviderCards(container, providers, type, showEmpty = true) {
     const titleWrap = document.createElement("div"); titleWrap.className = "provider-card-title";
     const title = document.createElement("b"); title.textContent = provider.name;
     titleWrap.append(title);
-    if (common) { const badge = document.createElement("span"); badge.className = "provider-common-badge"; badge.textContent = "常用"; titleWrap.append(badge); }
     const status = document.createElement("span");
     const configured = providerConfigured(provider, type);
     status.className = configured ? "status-ok" : "status-off";
     status.textContent = type === "oauth" ? (configured ? "已登录" : "未登录") : (configured ? "已设置" : "未设置");
     head.append(titleWrap, status);
-    const meta = document.createElement("small"); meta.className = "muted"; meta.textContent = `${provider.modelCount || 0} 个模型 · ${provider.id}`;
     const actions = document.createElement("div"); actions.className = "provider-card-actions";
     const button = document.createElement("button"); button.className = type === "oauth" && configured ? "danger-lite" : "primary";
     button.textContent = type === "oauth" ? (configured ? "退出" : "登录") : "设置API";
     if (type === "oauth") button.addEventListener("click", () => configured ? logoutProvider(provider.id, "oauth") : startOAuthLogin(provider));
     else button.addEventListener("click", () => requestApiKey(provider));
-    actions.append(button); card.append(head, meta, actions); container.append(card);
+    actions.append(button); card.append(head, actions); container.append(card);
   }
   if (showEmpty && !providers.length) { const empty = document.createElement("div"); empty.className = "muted"; empty.textContent = "暂无可用供应商"; container.append(empty); }
 }

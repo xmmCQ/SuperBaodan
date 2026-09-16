@@ -30,18 +30,21 @@ test('两类当日卡片可排序并记忆，日期隔离，不改源数据或�
   };
   await openDay();
   const titles = (records = false) => browser.evaluate(records ? "[...dailyRecordList.querySelectorAll('.daily-record-main strong')].map(n=>n.textContent)" : "[...dayTasks.querySelectorAll('.task-card-title')].map(n=>n.textContent)");
-  const drag = (list, from, to) => browser.evaluate(`(()=>{
+  const drag = (list, from, to) => browser.evaluate(`(async()=>{
     const cards=[...document.getElementById('${list}').children], source=cards[${from}], target=cards[${to}], handle=source, dt=new DataTransfer(), box=target.getBoundingClientRect();
     handle.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
     handle.dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:dt}));
     target.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:box.top+2}));
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const shadow=getComputedStyle(target).boxShadow;
     target.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:box.top+2}));
     handle.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}));
+    return shadow;
   })()`);
   assert.equal(await browser.evaluate("dayTasks.querySelectorAll('[data-card-order-handle]').length"), 0);
   assert.equal(await browser.evaluate(`(()=>{const button=dayTasks.querySelector('[data-action=edit]'), card=button.closest('.task-card');button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));const e=new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()});card.dispatchEvent(e);return e.defaultPrevented;})()`), true);
   await browser.evaluate("delete dayTasks.children[2].dataset.moveKind"); // A card without a movable date can still sort.
-  await drag('dayTasks', 2, 0);
+  assert.match(await drag('dayTasks', 2, 0), /inset/);
   assert.deepEqual(await titles(), ['工作C', '工作A', '工作B']);
   assert.equal(await browser.evaluate("calendarGrid.classList.contains('drag-active')"), false);
   await browser.evaluate('dailyRecordsTab.click()');

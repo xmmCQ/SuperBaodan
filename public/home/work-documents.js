@@ -1,7 +1,11 @@
 import { validateDocuments, normalizeTarget, UNCATEGORIZED, targetKey } from '../core/work-documents.js';
 import { parseDocumentMarkdown, checkImportRow, mergeDocumentImport } from '../core/work-document-import.js';
-import { node, button, field, documentDialog } from './work-document-dialog.js';
+import { node, button, field, documentDialog, decorateDocumentAction } from './work-document-dialog.js';
 import { createDocumentSorter, documentDragHandle, reorderDocumentSlots } from './work-document-sort.js';
+
+function documentKind(target) {
+  return /^https?:\/\//i.test(target.trim().replace(/^"(.*)"$/s, '$1')) ? 'url' : 'file';
+}
 
 export function createWorkDocuments({ trigger, api, uiDialogs }) {
   const dialog = node('dialog', '', 'modal wd-dialog'); dialog.id = 'workDocumentsDialog'; dialog.setAttribute('aria-labelledby', 'workDocumentsTitle');
@@ -11,16 +15,15 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
   const layout = node('div', '', 'wd-layout'), categories = node('nav', '', 'wd-categories'), list = node('div', '', 'wd-list'); categories.setAttribute('aria-label', '文档分类');
   const input = node('input'); input.type = 'file'; input.accept = '.md,text/markdown'; input.hidden = true;
   const add = button('添加文档', () => editDocument(), 'wd-primary'), importButton = button('导入 Markdown', () => input.click());
-  const refresh = button('重新读取', () => void load());
-  const template = node('a', '下载模板', 'wd-download-template'); template.href = '/templates/work-documents.md'; template.download = '工作文档导入模板.md';
-  heading.append(title, button('关闭', () => dialog.close())); toolbar.append(search, add, importButton, template, refresh);
+  const template = node('a', '下载模板', 'wd-download-template'); template.href = '/templates/work-documents.md'; template.download = '工作文档导入模板.md'; decorateDocumentAction(template, 'download', '下载模板');
+  heading.append(title, button('关闭', () => dialog.close())); toolbar.append(search, add, importButton, template);
   const deleteOption = node('label', '', 'wd-delete-option');
   const recycleSource = node('input'); recycleSource.type = 'checkbox';
   deleteOption.append(recycleSource, node('span', '删除入口时同时将源文件移入回收站'));
   layout.append(categories, list); dialog.append(heading, toolbar, notice, layout, deleteOption, input); document.body.append(dialog);
   let data = null, selected = 'all', busy = false, loading = 0, confirmingRecycle = false, recycleEnabled = false;
   recycleSource.addEventListener('change', async () => {
-    if (!recycleSource.checked) { recycleEnabled = false; return; }
+    if (!recycleSource.checked) { recycleEnabled = false; controls(); return; }
     recycleSource.checked = false; confirmingRecycle = true; controls();
     try {
       const accepted = await uiDialogs.confirm('勾选后删除快捷目录同时会删除源文件，是否确认勾选？', { title: '确认启用源文件删除', confirmText: '确认勾选', danger: true, compact: true, emphasisText: '删除源文件' });
@@ -31,7 +34,14 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
   const pending = new Set();
   const say = message => { notice.textContent = message; };
   const clone = () => structuredClone(validateDocuments(data));
-  function controls() { add.disabled = importButton.disabled = busy || !data; refresh.disabled = busy; recycleSource.disabled = busy || confirmingRecycle; }
+  function removalLabels() {
+    for (const el of list.querySelectorAll('[data-remove-document]')) {
+      const doc = data?.documents.find(item => item.id === el.dataset.removeDocument);
+      const label = recycleEnabled && doc?.kind === 'file' ? '删除入口并将源文件移入回收站' : '删除文档入口（保留源文件）';
+      el.title = label; el.setAttribute('aria-label', label);
+    }
+  }
+  function controls() { add.disabled = importButton.disabled = busy || !data; recycleSource.disabled = busy || confirmingRecycle; removalLabels(); }
   async function load(throwOnError = false) {
     const sequence = ++loading; busy = true; controls();
     try {
@@ -112,6 +122,9 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
         const handle = documentDragHandle('拖动调整分类顺序'); handle.disabled = !sortEnabled(); row.append(handle);
       }
       row.append(choose);
+      if (category.id === 'all') {
+        const newCategory = button('＋ 添加分类', () => editCategory()); newCategory.disabled = busy; row.append(newCategory);
+      }
       if (![UNCATEGORIZED, 'all'].includes(category.id)) {
         const menu = node('details', '', 'wd-category-menu'), summary = node('summary', '⋯'); summary.setAttribute('aria-label', `${category.name}分类操作`);
         const options = node('div'); options.append(button('重命名', () => !busy && editCategory(category)), button('删除分类', () => void deleteCategory(category)));
@@ -119,7 +132,6 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
       }
       categories.append(row);
     }
-    const newCategory = button('＋ 添加分类', () => editCategory()); newCategory.disabled = busy; categories.append(newCategory);
     const query = search.value.trim().toLowerCase(), categoryNames = new Map(data.categories.map(c => [c.id, c.name]));
     const visible = data.documents.filter(d => query ? `${d.name} ${categoryNames.get(d.categoryId)} ${d.target}`.toLowerCase().includes(query) : selected === 'all' || d.categoryId === selected);
     if (!visible.length) list.append(node('p', query ? '没有匹配的文档' : '暂无文档，点击“添加文档”或“导入 Markdown”。', 'form-hint'));
@@ -142,9 +154,11 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
       const address = node('small', `${categoryNames.get(doc.categoryId)} · ${doc.target}`); address.title = doc.target;
       info.append(link, address);
       const actions = node('div', '', 'wd-row-actions');
-      actions.append(action('编辑', '编辑文档入口', () => editDocument(doc)), action('删除', '删除文档入口', () => void deleteDocument(doc)));
+      const remove = action('删除', '删除文档入口', () => void deleteDocument(doc)); remove.dataset.removeDocument = doc.id;
+      actions.append(action('编辑', '编辑文档入口', () => editDocument(doc)), remove);
       row.append(handle, node('span', type, 'wd-type'), info, actions); list.append(row);
     }
+    removalLabels();
     categories.scrollTop = categoryScroll; list.scrollTop = documentScroll;
   }
   function editCategory(category) {
@@ -164,14 +178,13 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
       build: content => {
         const name = field(content, '文档名称', doc?.name || '', { max: 100 });
         const category = field(content, '分类', doc?.categoryId || (selected === 'all' ? UNCATEGORIZED : selected), { choices: data.categories.map(c => [c.id, c.name]) });
-        const kind = field(content, '类型', doc?.kind || 'file', { choices: [['file', '本地文件'], ['url', '在线文档']] });
         const target = field(content, '文件路径或网址', doc?.target || '');
         let picking = false;
         const pickerStatus = node('p', '', 'wd-picker-status'); pickerStatus.setAttribute('role', 'status');
         const browse = button('浏览本地文件', async () => {
-          if (picking || kind.value !== 'file') return;
-          picking = true; browse.disabled = true; kind.disabled = true; target.disabled = true;
-          browse.textContent = '正在选择…'; pickerStatus.textContent = '请在 Windows 文件选择窗口中选择文档。';
+          if (picking) return;
+          picking = true; browse.disabled = true; target.disabled = true;
+          browse.title = '正在选择…'; browse.setAttribute('aria-label', '正在选择本地文件'); pickerStatus.textContent = '请在 Windows 文件选择窗口中选择文档。';
           const editor = content.closest('dialog'), controller = new AbortController();
           const cancelPick = () => controller.abort(); editor.addEventListener('close', cancelPick, { once: true });
           try {
@@ -180,13 +193,12 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
             if (!result.cancelled) { target.value = result.path; if (!name.value.trim()) name.value = result.name.slice(0, 100); }
             pickerStatus.textContent = result.cancelled ? '已取消选择，原内容保持不变。' : '已选择文件，名称可自定义；点击保存创建入口。';
           } catch (error) { if (editor.isConnected) pickerStatus.textContent = error.message; }
-          finally { editor.removeEventListener('close', cancelPick); picking = false; browse.disabled = false; kind.disabled = false; target.disabled = false; browse.textContent = '浏览本地文件'; }
+          finally { editor.removeEventListener('close', cancelPick); picking = false; browse.disabled = false; target.disabled = false; browse.title = '浏览本地文件'; browse.setAttribute('aria-label', '浏览本地文件'); }
         }, 'wd-browse-file');
-        browse.hidden = kind.value !== 'file'; kind.addEventListener('change', () => { browse.hidden = kind.value !== 'file'; pickerStatus.textContent = ''; });
+        target.addEventListener('input', () => { pickerStatus.textContent = ''; });
         content.append(browse, pickerStatus);
-        target.addEventListener('change', () => { if (!name.value.trim() && kind.value === 'file') name.value = target.value.trim().replace(/^"|"$/g, '').split(/[\\/]/).at(-1).slice(0, 100); });
-        content.append(node('p', '仅保存文档入口，不复制原文件。', 'form-hint'));
-        return () => ({ id: doc?.id || 'new', name: name.value, categoryId: category.value, kind: kind.value, target: target.value, picking });
+        target.addEventListener('change', () => { if (!name.value.trim() && documentKind(target.value) === 'file') name.value = target.value.trim().replace(/^"|"$/g, '').split(/[\\/]/).at(-1).slice(0, 100); });
+        return () => ({ id: doc?.id || 'new', name: name.value, categoryId: category.value, kind: documentKind(target.value), target: target.value, picking });
       },
       save: async values => {
         if (values.picking) throw new Error('请先完成或取消文件选择，再保存入口');
@@ -231,7 +243,7 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
       build: content => {
         content.append(node('p', '只导入选中的标题和链接，不修改原 Markdown。无效条目可修正后勾选。', 'form-hint'));
         const status = node('p', '', 'wd-import-summary'), editors = [];
-        const collect = () => editors.map(e => ({ selected: e.selected.checked, name: e.name.value, category: e.category.value, kind: e.kind.value, target: e.target.value }));
+        const collect = () => editors.map(e => ({ selected: e.selected.checked, name: e.name.value, category: e.category.value, kind: documentKind(e.target.value), target: e.target.value }));
         function assess() {
           const values = collect(); let invalid = 0;
           values.forEach((row, i) => {
@@ -250,9 +262,9 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
           meta.append(node('span', `第${row.line}行`, 'form-hint'), excluded);
           box.append(selected, meta);
           const name = field(box, '名称', row.name, { max: 100 }), category = field(box, '分类', row.category, { max: 40 });
-          const kind = field(box, '类型', row.kind, { choices: [['file', '本地文件'], ['url', '在线文档']] }), target = field(box, '地址', row.target);
+          const target = field(box, '地址', row.target);
           const error = node('small', row.error || '', 'wd-import-error'); box.append(error); content.append(box);
-          editors.push({ box, excluded, selected, name, category, kind, target, error }); box.addEventListener('input', assess);
+          editors.push({ box, excluded, selected, name, category, target, error }); box.addEventListener('input', assess);
         }
         assess(); return collect;
       },

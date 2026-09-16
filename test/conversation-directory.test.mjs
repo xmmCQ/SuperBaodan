@@ -55,10 +55,15 @@ test("两处目录先加载历史再定位标题，标识当前轮次，新消�
     await browser.evaluate("directoryButton.click()");
     await browser.waitFor("document.querySelectorAll('.directory-question').length === 70");
     assert.equal(await browser.evaluate("document.querySelectorAll('.directory-heading').length"), 140);
+    assert.equal(await browser.evaluate("document.querySelectorAll('.directory-sections[open]').length"), 0);
+    assert.equal(await browser.evaluate("document.querySelector('.directory-number').textContent"), '01');
+    assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('.directory-question-label')).webkitLineClamp"), '2');
     assert.equal(await browser.evaluate(`Boolean(document.querySelector('#${id} > [data-message-index="0"]'))`), false);
     await browser.evaluate("document.querySelector('[data-turn-index=\"0\"]').click()");
     await browser.waitFor(`document.querySelectorAll('#${id} > .message').length === 140`); await paint(browser);
     assert.equal(await browser.evaluate("document.querySelector('.directory-question.is-current').dataset.turnIndex"), "0");
+    await browser.evaluate("document.querySelector('[data-directory-key=\"sections-0\"]').click()"); await paint(browser);
+    assert.equal(await browser.evaluate("document.querySelector('[data-directory-key=\"sections-0\"]').parentElement.open"), true);
     await browser.evaluate("document.querySelector('[data-directory-key=\"heading-1-1\"]').click()"); await paint(browser);
     const headingOffset = await browser.evaluate(`document.querySelector('#${id} > [data-message-index="1"] h2').getBoundingClientRect().top-document.getElementById('${id}').getBoundingClientRect().top`);
     assert.ok(Math.abs(headingOffset - 12) < 3, `${page} 标题偏移 ${headingOffset}`);
@@ -71,6 +76,7 @@ test("两处目录先加载历史再定位标题，标识当前轮次，新消�
       { type: "message_end", message: answer }, { type: "agent_settled" },
     ]) for (const res of fixture.state.eventClients) res.write(`data: ${JSON.stringify(event)}\n\n`);
     await browser.waitFor("document.querySelectorAll('.directory-question').length === 71"); await paint(browser);
+    assert.equal(await browser.evaluate("document.querySelector('[data-directory-key=\"sections-0\"]').parentElement.open"), true);
     assert.equal(await browser.evaluate(`document.getElementById('${id}').scrollTop`), top);
     assert.equal(await browser.evaluate("document.querySelector('.directory-question.is-current').dataset.turnIndex"), "0");
     await browser.evaluate("conversationDirectory.querySelector('[data-latest]').click()"); await paint(browser);

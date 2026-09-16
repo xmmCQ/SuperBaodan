@@ -78,6 +78,14 @@ export async function launchBrowser({ width, height } = {}) {
     },
     evaluate: connection.evaluate,
     waitFor: connection.waitFor,
+    async forcePseudoState(selector, forcedPseudoClasses) {
+      await connection.command('DOM.enable');
+      await connection.command('CSS.enable');
+      const { root } = await connection.command('DOM.getDocument');
+      const { nodeId } = await connection.command('DOM.querySelector', { nodeId: root.nodeId, selector });
+      if (!nodeId) throw new Error(`未找到元素：${selector}`);
+      await connection.command('CSS.forcePseudoState', { nodeId, forcedPseudoClasses });
+    },
     async dragPointer(from, to) {
       await connection.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y });
       await connection.command('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 });

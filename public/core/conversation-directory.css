@@ -1,18 +1,23 @@
-.conversation-directory { position: fixed; z-index: 70; width: 300px; max-width: calc(100vw - 16px); padding: 10px; border: 1px solid #d0dfee; border-radius: 12px; background: #fff; color: #334155; box-shadow: 0 10px 35px #20375426; }
+.conversation-directory { position: fixed; z-index: 70; width: 300px; max-width: calc(100vw - 16px); padding: 10px; border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; color: #30343b; box-shadow: 0 8px 28px rgb(0 0 0 / 10%); }
 .conversation-directory.hidden { display: none !important; }
-.conversation-directory header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; }
-.conversation-directory header strong { margin-right: auto; }
-.conversation-directory header button { border: 0; border-radius: 6px; padding: 5px; background: #eff5fc; color: #315f91; font-size: 12px; cursor: pointer; }
-.conversation-directory-list { max-height: min(55vh, 480px); overflow: auto; overscroll-behavior: contain; }
-.directory-turn { border-bottom: 1px solid #edf1f6; padding: 5px 0; }
-.conversation-directory-list button { display: block; width: 100%; box-sizing: border-box; padding: 7px 9px; border: 0; border-radius: 6px; background: transparent; text-align: left; overflow-wrap: anywhere; color: #40566f; cursor: pointer; line-height: 1.45; }
-.directory-question { font-size: 13px; font-weight: 600; }
-.conversation-directory-list .directory-question.is-current { color: #205eab; background: #e8f1ff; box-shadow: inset 3px 0 #438df8; }
-.directory-question.is-current::after { content: '当前'; display: inline-block; margin-left: 6px; padding: 1px 4px; font-size: 10px; border-radius: 4px; background: #d4e6ff; }
-.conversation-directory-list .directory-heading { font-size: 12px; padding-left: 18px; }
-.conversation-directory-list .directory-heading.level-2 { padding-left: 29px; color: #64748b; }
-.conversation-directory-list button:hover, .conversation-directory-list button:focus-visible { background: #f0f6ff; }
-.conversation-directory button:focus-visible { outline: 2px solid #8ab3ed; outline-offset: -2px; }
-.conversation-directory-list > p { font-size: 12px; color: #64748b; padding: 12px 4px; }
+.conversation-directory header { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; padding-left: 8px; font-size: 14px; }
+.conversation-directory header strong { margin-right: auto; font-weight: 600; }
+.conversation-directory header button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: #737982; cursor: pointer; }
+.conversation-directory header button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.conversation-directory [data-latest] svg { transform: rotate(180deg); }
+.conversation-directory-list { max-height: min(55vh, 480px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.directory-turn { padding: 2px 0; }
+.conversation-directory-list button { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 0; border-radius: 8px; background: transparent; text-align: left; overflow-wrap: anywhere; color: #363b43; cursor: pointer; line-height: 1.5; }
+.conversation-directory-list .directory-question { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 500; }
+.directory-number { flex: 0 0 22px; color: #969ba3; font-size: 11px; font-variant-numeric: tabular-nums; }
+.directory-question-label { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.conversation-directory-list .directory-question.is-current { background: #eceef1; color: #171a20; }
+.directory-sections { margin: 0 0 3px 38px; }
+.directory-sections summary { width: fit-content; padding: 4px 2px; color: #858b94; font-size: 11px; cursor: pointer; border-radius: 4px; }
+.conversation-directory-list .directory-heading { display: block; font-size: 12px; padding: 5px 6px; color: #686e78; }
+.conversation-directory-list .directory-heading.level-2 { padding-left: 16px; }
+.conversation-directory button:hover, .directory-sections summary:hover { background: #f1f2f4; color: #30343b; }
+.conversation-directory :is(button, summary):focus-visible { outline: 2px solid #626973; outline-offset: -2px; }
+.conversation-directory-list > p { font-size: 12px; color: #858b94; padding: 12px 8px; }
 #directoryButton { font-size: 12px; }
 .chat-header #directoryButton { width: 30px; min-width: 30px; padding: 0; }
