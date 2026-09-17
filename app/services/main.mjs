@@ -61,11 +61,8 @@ function shutdown() {
   // Initialization must finish before tearing down its resources.
   if (!context) return Promise.resolve();
   if (shutdownPromise) return shutdownPromise;
-  context.shuttingDown = true;
   shutdownPromise = (async () => {
-    for (const { controller } of pending.values()) controller.abort();
-    await Promise.allSettled([...pending.values()].map(item => item.task));
-    await context.shutdown();
+    await context.shutdown([...pending.values()]);
     send({ type: 'shutdown-complete' });
     process.exit(0);
   })().catch(error => send({ type: 'shutdown-error', message: publicErrorMessage(error) }));

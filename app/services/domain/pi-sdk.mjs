@@ -75,7 +75,7 @@ export class PiSdkRuntime extends EventEmitter {
   }
 
   async ensureStarted(sessionPath = this.activeSessionPath) {
-    if (this.closed) throw new Error("Windows Pi 运行时已关闭");
+    if (this.closed || this.quiescing) throw new Error("Windows Pi 运行时已关闭");
     if (this.startPromise) return this.startPromise;
     if (this.stopping || this.transitionCount) throw busyError();
     if (this.running && sameSessionPath(sessionPath, this.activeSessionPath)) return;
@@ -85,9 +85,9 @@ export class PiSdkRuntime extends EventEmitter {
   start(sessionPath = null) { return this.enqueueTransition(() => this.startInternal(sessionPath)); }
 
   async startInternal(sessionPath) {
-    if (this.closed) throw new Error("Windows Pi 运行时已关闭");
+    if (this.closed || this.quiescing) throw new Error("Windows Pi 运行时已关闭");
     await this.performStop("restart");
-    if (this.closed) throw new Error("Windows Pi 运行时已关闭");
+    if (this.closed || this.quiescing) throw new Error("Windows Pi 运行时已关闭");
     this.runtimeState = "starting";
     try {
       await Promise.all([mkdir(this.cwd, { recursive: true }), mkdir(this.sessionDir, { recursive: true })]);
@@ -102,10 +102,10 @@ export class PiSdkRuntime extends EventEmitter {
       this.theme = theme;
       host.setBeforeSessionInvalidate(() => this.detachSession());
       host.setRebindSession(() => this.bindSession());
-      if (this.closed) throw new Error("Windows Pi 运行时已关闭");
+      if (this.closed || this.quiescing) throw new Error("Windows Pi 运行时已关闭");
       if (this.stopRequests) throw busyError("Pi SDK启动已取消");
       await this.bindSession();
-      if (this.closed) throw new Error("Windows Pi 运行时已关闭");
+      if (this.closed || this.quiescing) throw new Error("Windows Pi 运行时已关闭");
       this.runtimeState = "running";
       this.scheduleIdleTimer();
       this.emitEvent({ type: "runtime_ready", state: sessionState(host.session), idleTimeoutMs: this.idleTimeoutMs });
@@ -129,6 +129,7 @@ export class PiSdkRuntime extends EventEmitter {
       theme: this.theme,
       onPendingChange: (count) => this.setBusy("extension-ui", count > 0),
     });
+    if (this.quiescing) this.uiBridge.close();
     this.unsubscribe = session.subscribe((event) => {
       if (this.host !== host || host.session !== session) return;
       this.trackAgentEvent(event);
@@ -367,6 +368,23 @@ export class PiSdkRuntime extends EventEmitter {
       finally { this.stopRequests -= 1; }
     });
   }
+  // Cancel model work and interaction without disposing resources needed by
+  // accepted writes. Final close runs only after those writes have drained.
+  beginShutdown() {
+    if (this.quiescePromise) return this.quiescePromise;
+    this.quiescing = true;
+    this.abortVersion += 1;
+    clearTimeout(this.idleTimer);
+    this.uiBridge?.close();
+    const session = this.host?.session;
+    this.quiescePromise = Promise.allSettled(['clearQueue', 'abortCompaction', 'abortBash', 'abortRetry', 'abort'].map(method =>
+      Promise.resolve().then(() => session?.[method]?.()),
+    )).then(results => {
+      for (const result of results) if (result.status === 'rejected') this.log.error(`[pi-sdk] 取消任务失败：${result.reason?.message || result.reason}`);
+    });
+    return this.quiescePromise;
+  }
+
   close() { this.closed = true; return this.stop("shutdown"); }
 
   async performStop(reason) {

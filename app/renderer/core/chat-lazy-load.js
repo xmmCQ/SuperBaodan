@@ -35,8 +35,19 @@ export function prependPreviousMessages(window, container, renderItem, afterAppe
 export function prependPreservingScroll(container, fragment, afterAppend) {
   const anchor = [...(container.children || [])].find((node) => node.getBoundingClientRect().height > 0) || container.firstElementChild;
   const top = anchor?.getBoundingClientRect().top;
-  const scrollTop = container.scrollTop;
-  container.prepend(fragment);
-  afterAppend?.();
-  if (anchor) container.scrollTop = scrollTop + anchor.getBoundingClientRect().top - top;
+  // DOM rectangles include the home canvas CSS zoom; scrollTop does not.
+  const canvas = container.closest?.('.app-shell');
+  const scale = canvas ? Number.parseFloat(getComputedStyle(canvas).zoom) || 1 : 1;
+  const behavior = container.style.scrollBehavior;
+  const anchoring = container.style.overflowAnchor;
+  container.style.scrollBehavior = 'auto';
+  container.style.overflowAnchor = 'none';
+  try {
+    container.prepend(fragment);
+    afterAppend?.();
+    if (anchor) container.scrollTop += (anchor.getBoundingClientRect().top - top) / scale;
+  } finally {
+    container.style.scrollBehavior = behavior;
+    container.style.overflowAnchor = anchoring;
+  }
 }

@@ -58,6 +58,11 @@ export class WindowManager {
       this.closeRequested = true;
       Promise.resolve(this.onCloseRequested?.({ source: "window" })).finally(() => { this.closeRequested = false; }).catch(() => {});
     });
+    // Only a completed, explicit application exit may bypass page draft guards.
+    // Ordinary navigation still honors beforeunload; closing to tray never unloads.
+    window.webContents.on("will-prevent-unload", (event) => {
+      if (this.allowClose) event.preventDefault();
+    });
     window.on("session-end", () => this.onSessionEnd?.());
     window.on("closed", () => {
       clearTimeout(this.saveTimer);

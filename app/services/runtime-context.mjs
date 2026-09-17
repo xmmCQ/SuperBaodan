@@ -361,14 +361,26 @@ class RuntimeContext {
     return { results: Array.isArray(results) ? results : [results], warning: stderr.trim() || null };
   }
 
-  shutdown() {
-    if (this.shutdownPromise) return this.shutdownPromise;
+  beginShutdown() {
+    if (this.quiescePromise) return this.quiescePromise;
     this.shuttingDown = true;
     this.uiEventPayloads.clear();
     this.activeAuthLoginAbort?.abort();
+    this.piAdmin.close();
+    const runtimes = new Set([this.piRuntime, this.switchCandidateRuntime].filter(Boolean));
+    this.quiescePromise = Promise.allSettled([...runtimes].map(runtime => runtime.beginShutdown?.()));
+    return this.quiescePromise;
+  }
+
+  shutdown(requests = []) {
+    if (this.shutdownPromise) return this.shutdownPromise;
+    const interrupted = this.beginShutdown();
+    for (const request of requests) request.controller?.abort();
     this.shutdownPromise = (async () => {
+      // Release interactive/model waits before draining accepted requests.
+      // Keep the runtime alive until their persistent writes have finished.
+      await Promise.allSettled([interrupted, ...requests.map(request => request.task)]);
       await Promise.allSettled([this.taskMutationQueue, this.workspaceSwitchQueue]);
-      this.piAdmin.close();
       const runtimes = new Set([this.piRuntime, this.switchCandidateRuntime].filter(Boolean));
       await Promise.allSettled([...runtimes].map(runtime => runtime.close()));
     })();
