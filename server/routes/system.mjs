@@ -17,6 +17,8 @@ export function registerSystemRoutes(router) {
       workspace: context.publicWorkspace(activeWorkspace),
       assistantUrl: "/assistant.html",
       today: context.today(),
+      desktopInstanceId: config.desktopInstanceId,
+      desktopControlled: Boolean(config.desktopControlled),
     });
   });
 
@@ -28,6 +30,7 @@ export function registerSystemRoutes(router) {
   });
 
   router.post("/api/system/shutdown", async (_req, res, _url, _match, context) => {
+    if (context.config.desktopControlled) return json(res, 409, { error: "桌面模式请通过应用退出流程关闭" });
     if (context.shuttingDown) return json(res, 202, { ok: true, shuttingDown: true });
     context.shuttingDown = true;
     json(res, 200, { ok: true, shuttingDown: true });

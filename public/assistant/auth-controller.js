@@ -54,6 +54,7 @@ function closeLoginPopup() {
 
 function prepareLoginPopup(providerId) {
   closeLoginPopup();
+  if (window.superBaodanDesktopRuntime?.isDesktop) return true;
   const popup = window.open("about:blank", "_blank");
   if (!popup) return false;
   loginPopup = popup;
@@ -66,6 +67,10 @@ function prepareLoginPopup(providerId) {
 }
 
 function navigateLoginPopup(url) {
+  if (window.superBaodanDesktopRuntime?.isDesktop) {
+    void window.superBaodanDesktopRuntime.openExternal(url);
+    return true;
+  }
   const popup = loginPopup;
   if (!popup || popup.closed) { loginPopup = null; return false; }
   try {

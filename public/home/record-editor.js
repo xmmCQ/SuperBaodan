@@ -122,5 +122,16 @@ export function createRecordEditor({ state, elements: el, api, uiDialogs, render
     });
   }
 
-  return { open, requestClose, submit, handleTypeChange, queuePreview, isOpen: () => !el.dailyRecordModal.classList.contains("hidden") };
+  return {
+    open,
+    requestClose,
+    submit,
+    handleTypeChange,
+    queuePreview,
+    isOpen: () => !el.dailyRecordModal.classList.contains("hidden"),
+    closeState: () => ({
+      unsaved: !el.dailyRecordModal.classList.contains("hidden") && snapshot() !== state.editorInitial,
+      busy: Boolean(state.editorSaving),
+    }),
+  };
 }

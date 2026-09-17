@@ -1,3 +1,4 @@
+import "/core/desktop-bridge.js?v=1";
 import { createUiDialogController } from "/ui-dialog.js?v=5";
 import { createWorkApps } from './work-apps.js';
 import { createWorkDocuments } from './work-documents.js';
@@ -32,11 +33,28 @@ const uiDialogs = createUiDialogController({
 });
 
 createWorkApps({ trigger: el.openAppsButton, api, uiDialogs, toast, escapeHtml, openAll: openWorkApps });
-createWorkDocuments({ trigger: el.workDocumentsButton, api, uiDialogs });
+const workDocuments = createWorkDocuments({ trigger: el.workDocumentsButton, api, uiDialogs });
 
 let homeChat;
 let vskills;
 let historySearch;
+window.superBaodanDesktopRuntime.registerCloseState(() => {
+  const documentState = workDocuments.closeState();
+  const recordState = recordEditor.closeState();
+  const reasons = [];
+  if (el.chatInput.value.trim()) reasons.push("首页存在未发送的消息");
+  if (!el.taskModal.classList.contains("hidden")) reasons.push("待办编辑尚未完成");
+  if (recordState.unsaved) reasons.push("每日记录存在未保存修改");
+  if (!el.vskillForm.classList.contains("hidden")) reasons.push("VSkill 编辑尚未完成");
+  reasons.push(...documentState.reasons);
+  if (homeChat?.isBusy()) reasons.push("模型任务仍在执行");
+  if (state.planner.taskSaving || state.records.saving || recordState.busy || state.vskills.vskillBusy) reasons.push("保存操作正在进行");
+  return {
+    unsaved: Boolean(el.chatInput.value.trim() || !el.taskModal.classList.contains("hidden") || recordState.unsaved || !el.vskillForm.classList.contains("hidden") || documentState.unsaved),
+    busy: Boolean(homeChat?.isBusy() || state.planner.taskSaving || state.records.saving || recordState.busy || state.vskills.vskillBusy || documentState.busy),
+    reasons,
+  };
+});
 const workspaceSwitcher = createWorkspaceSwitcher({
   trigger: el.workspaceSwitcher,
   api,
@@ -266,10 +284,17 @@ function bindEvents() {
 }
 
 async function exitWorkbench() {
-  if (!await uiDialogs.confirm("助手和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" })) return;
   const shutdownIcon = document.querySelector(".brand-mark img")?.cloneNode(true);
   setIconBusy(el.exitWorkbenchButton, true);
-  try { await api("/api/system/shutdown", { method: "POST" }); } catch {}
+  const result = await window.superBaodanDesktopRuntime.requestExit({
+    confirmBrowser: () => uiDialogs.confirm("助手和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" }),
+    shutdownBrowser: () => api("/api/system/shutdown", { method: "POST" }).catch(() => {}),
+    afterBrowserExit: () => renderBrowserShutdown(shutdownIcon),
+  });
+  if (result?.cancelled) setIconBusy(el.exitWorkbenchButton, false);
+}
+
+function renderBrowserShutdown(shutdownIcon) {
   const main = document.createElement("main"); main.className = "shutdown-screen";
   const content = document.createElement("div"); if (shutdownIcon) content.append(shutdownIcon);
   const title = document.createElement("h1"); title.textContent = "工作台已退出";

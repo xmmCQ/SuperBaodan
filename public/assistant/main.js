@@ -1,3 +1,4 @@
+import "/core/desktop-bridge.js?v=1";
 import { createUiDialogController } from "/ui-dialog.js?v=5";
 import { setIconBusy } from "/icons.js?v=2";
 import { createWorkspaceSwitcher } from "/workspace-switcher.js?v=5";
@@ -37,6 +38,20 @@ let skills;
 let settings;
 let workspace;
 let projectPrompt;
+window.superBaodanDesktopRuntime.registerCloseState(() => {
+  const reasons = [];
+  if (el.promptInput.value.trim()) reasons.push("存在未发送的消息");
+  if (chat?.imageCount()) reasons.push("存在未发送的图片附件");
+  if (projectPrompt?.hasDraft()) reasons.push("项目提示词存在未保存修改");
+  if (state.chat.running || state.chat.streaming) reasons.push("模型任务仍在执行");
+  if (state.skills.skillBusy) reasons.push("Skill 操作正在进行");
+  if (state.auth.activeLoginSource) reasons.push("账号登录正在进行");
+  return {
+    unsaved: Boolean(el.promptInput.value.trim() || chat?.imageCount() || projectPrompt?.hasDraft()),
+    busy: Boolean(state.chat.running || state.chat.streaming || state.skills.skillBusy || state.auth.activeLoginSource),
+    reasons,
+  };
+});
 const workspaceSwitcher = createWorkspaceSwitcher({
   trigger: el.workspaceSwitcher,
   showPathTooltip: false,
@@ -285,10 +300,17 @@ async function refreshStateAndSessions() {
 }
 
 async function shutdownWorkbench() {
-  if (!await uiDialogs.confirm("助手和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" })) return;
   const shutdownIcon = document.querySelector(".brand-row img")?.cloneNode(true);
   setIconBusy(el.exitWorkbench, true);
-  try { await api("/api/system/shutdown", { method: "POST" }); } catch {}
+  const result = await window.superBaodanDesktopRuntime.requestExit({
+    confirmBrowser: () => uiDialogs.confirm("助手和后台服务将同时关闭。", { title: "确定退出工作台吗？", danger: true, confirmText: "退出" }),
+    shutdownBrowser: () => api("/api/system/shutdown", { method: "POST" }).catch(() => {}),
+    afterBrowserExit: () => renderBrowserShutdown(shutdownIcon),
+  });
+  if (result?.cancelled) setIconBusy(el.exitWorkbench, false);
+}
+
+function renderBrowserShutdown(shutdownIcon) {
   const main = document.createElement("main"); main.className = "shutdown-screen";
   const content = document.createElement("div"); if (shutdownIcon) content.append(shutdownIcon);
   const title = document.createElement("h1"); title.textContent = "工作台已退出";

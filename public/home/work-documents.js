@@ -277,5 +277,16 @@ export function createWorkDocuments({ trigger, api, uiDialogs }) {
   search.addEventListener('input', render);
   trigger.addEventListener('click', () => { if (dialog.open || busy) return; recycleEnabled = false; recycleSource.checked = false; dialog.showModal(); render(); void load(); });
   dialog.addEventListener('close', () => { categorySorter.cancel(); documentSorter.cancel(); recycleEnabled = false; recycleSource.checked = false; trigger.focus(); });
-  return { load, render };
+  return {
+    load,
+    render,
+    closeState: () => ({
+      unsaved: Boolean(document.querySelector('.wd-editor[open]')),
+      busy,
+      reasons: [
+        ...(document.querySelector('.wd-editor[open]') ? ['工作文档编辑尚未完成'] : []),
+        ...(busy ? ['工作文档操作正在进行'] : []),
+      ],
+    }),
+  };
 }

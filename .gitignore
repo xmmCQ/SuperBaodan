@@ -7,6 +7,7 @@
 .env.*
 !.env.example
 **/auth.json
+**/models.json
 **/credentials.json
 *.pem
 *.key

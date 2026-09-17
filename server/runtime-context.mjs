@@ -383,7 +383,7 @@ class RuntimeContext {
     return { results: Array.isArray(results) ? results : [results], warning: stderr.trim() || null };
   }
 
-  shutdown() {
+  shutdown({ exitProcess = !this.config.desktopControlled } = {}) {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
     this.uiEventPayloads.clear();
@@ -391,13 +391,19 @@ class RuntimeContext {
     this.shutdownPromise = (async () => {
       for (const client of this.eventClients) client.end();
       this.eventClients.clear();
-      this.server?.close(); this.server?.closeIdleConnections?.();
+      const serverClosed = new Promise((resolve) => {
+        if (!this.server?.listening) return resolve();
+        this.server.close(() => resolve());
+        this.server.closeIdleConnections?.();
+      });
+      await Promise.allSettled([this.taskMutationQueue, this.workspaceSwitchQueue]);
       this.piAdmin.close();
       const runtimes = new Set([this.piRuntime, this.switchCandidateRuntime].filter(Boolean));
       await Promise.allSettled([...runtimes].map((runtime) => runtime.close()));
-      process.exit(0);
+      await serverClosed;
+      if (exitProcess) process.exit(0);
     })();
-    setTimeout(() => process.exit(0), 7000).unref();
+    if (exitProcess) setTimeout(() => process.exit(0), 7000).unref();
     return this.shutdownPromise;
   }
 }

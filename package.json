@@ -1,11 +1,13 @@
 {
   "name": "super-baodan-workbench",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
+  "main": "desktop/main.mjs",
   "description": "集成日历、待办、每日记录和智能助手的 Windows 工作台",
   "scripts": {
     "start": "node launcher.mjs",
+    "desktop:dev": "electron .",
     "server": "node server.mjs",
     "test": "node --test test/*.test.mjs",
     "test:smoke": "node --test test/browser-smoke.test.mjs",
@@ -13,5 +15,8 @@
   },
   "engines": {
     "node": ">=22.19.0"
+  },
+  "devDependencies": {
+    "electron": "44.1.1"
   }
 }
