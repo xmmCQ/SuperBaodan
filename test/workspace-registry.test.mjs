@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { WorkspaceRegistry, samePath, validateName } from "../lib/workspace-registry.mjs";
+import { WorkspaceRegistry, samePath, validateName } from "../app/services/domain/workspace-registry.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 async function harness() {

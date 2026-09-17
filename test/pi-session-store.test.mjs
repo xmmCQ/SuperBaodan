@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { appendFile, stat, unlink, utimes, writeFile } from "node:fs/promises";
-import { SessionListScanner, readSessionMetadata } from "../lib/pi-session-store.mjs";
+import { SessionListScanner, readSessionMetadata } from "../app/services/domain/pi-session-store.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 const transcript = (id, text = "hello") => [

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { executionLabel } from "../public/core/execution-process.js";
+import { executionLabel } from "../app/renderer/core/execution-process.js";
 import { edgeAvailable, launchBrowser } from "./helpers/browser-harness.mjs";
 import { createSmokeServer } from "./helpers/smoke-server.mjs";
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { proportionalScrollTop } from "../public/ui-dialog.js";
+import { proportionalScrollTop } from "../app/renderer/ui-dialog.js";
 
 test("Markdown编辑器按滚动比例同步且限制在有效范围", () => {
   const source = { scrollHeight: 1000, clientHeight: 200, scrollTop: 400 };

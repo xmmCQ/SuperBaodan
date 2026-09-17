@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TrayManager } from "../desktop/tray-manager.mjs";
+import { TrayManager } from "../app/main/tray-manager.mjs";
 
 function harness({ fail = false } = {}) {
   const calls = { shown: 0, exited: 0, errors: [], destroyed: 0 };

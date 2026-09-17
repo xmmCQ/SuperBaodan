@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_VSKILLS, VSkillManager } from "../lib/vskill-manager.mjs";
+import { DEFAULT_VSKILLS, VSkillManager } from "../app/services/domain/vskill-manager.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 async function createHarness() {

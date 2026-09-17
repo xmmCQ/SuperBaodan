@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createMessageWindow, VISIBLE_PAGE_SIZE } from "../public/core/chat-lazy-load.js";
+import { createMessageWindow, VISIBLE_PAGE_SIZE } from "../app/renderer/core/chat-lazy-load.js";
 import { edgeAvailable, launchBrowser } from "./helpers/browser-harness.mjs";
 import { createSmokeServer } from "./helpers/smoke-server.mjs";
 

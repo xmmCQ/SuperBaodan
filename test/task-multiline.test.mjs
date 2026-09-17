@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseWorkTodo } from '../lib/tasks.mjs';
-import { addTaskMarkdown, updateTaskMarkdown, moveTaskDateMarkdown, deleteTaskMarkdown } from '../lib/task-writer.mjs';
+import { parseWorkTodo } from '../app/services/domain/tasks.mjs';
+import { addTaskMarkdown, updateTaskMarkdown, moveTaskDateMarkdown, deleteTaskMarkdown } from '../app/services/domain/task-writer.mjs';
 
 test('任务换行经过新增、编辑、完成、改期和删除仍保持结构完整', () => {
   const source = '# 工作\r\n- [ ] 原有事项 📅 2026-09-08';

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PiAdmin, backupAndAtomicJson } from "../lib/pi-admin.mjs";
+import { PiAdmin, backupAndAtomicJson } from "../app/services/domain/pi-admin.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 test("maintenance rejects credential changes while Pi is busy", async () => {

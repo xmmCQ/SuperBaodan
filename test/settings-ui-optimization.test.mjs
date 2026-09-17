@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const html = await readFile(new URL("../public/assistant.html", import.meta.url), "utf8");
-const auth = await readFile(new URL("../public/assistant/auth-controller.js", import.meta.url), "utf8");
-const sessions = await readFile(new URL("../public/assistant/sessions-view.js", import.meta.url), "utf8");
-const assistantCss = await readFile(new URL("../public/assistant.css", import.meta.url), "utf8");
-const homeCss = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
-const iconCss = await readFile(new URL("../public/icon-actions.css", import.meta.url), "utf8");
+const html = await readFile(new URL("../app/renderer/assistant.html", import.meta.url), "utf8");
+const auth = await readFile(new URL("../app/renderer/assistant/auth-controller.js", import.meta.url), "utf8");
+const sessions = await readFile(new URL("../app/renderer/assistant/sessions-view.js", import.meta.url), "utf8");
+const assistantCss = await readFile(new URL("../app/renderer/assistant.css", import.meta.url), "utf8");
+const homeCss = await readFile(new URL("../app/renderer/styles.css", import.meta.url), "utf8");
+const iconCss = await readFile(new URL("../app/renderer/icon-actions.css", import.meta.url), "utf8");
 
 test("模型配置支持供应商搜索、常用优先和更多供应商折叠", () => {
   for (const id of [

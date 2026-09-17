@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MAX_TEXT_PREVIEW_BYTES, MAX_UPLOAD_FILE_BYTES, WorkspaceService, resolveLexically, validateUploadFiles } from "../lib/workspace.mjs";
+import { MAX_TEXT_PREVIEW_BYTES, MAX_UPLOAD_FILE_BYTES, WorkspaceService, resolveLexically, validateUploadFiles } from "../app/services/domain/workspace.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 async function harness() {

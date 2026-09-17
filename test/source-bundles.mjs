@@ -6,9 +6,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function readBundle(kind) {
   const entries = {
-    home: [path.join(ROOT, "public", "app.js"), ...(await listFiles(path.join(ROOT, "public", "home"), ".js"))],
-    assistant: [path.join(ROOT, "public", "assistant.js"), ...(await listFiles(path.join(ROOT, "public", "assistant"), ".js"))],
-    server: [path.join(ROOT, "server.mjs"), ...(await listFiles(path.join(ROOT, "server"), ".mjs"))],
+    home: [path.join(ROOT, "app", "renderer", "app.js"), ...(await listFiles(path.join(ROOT, "app", "renderer", "home"), ".js"))],
+    assistant: [path.join(ROOT, "app", "renderer", "assistant.js"), ...(await listFiles(path.join(ROOT, "app", "renderer", "assistant"), ".js"))],
+    server: [path.join(ROOT, "app/services/main.mjs"), ...(await listFiles(path.join(ROOT, "app/services"), ".mjs"))],
   }[kind];
   if (!entries) throw new Error(`未知源码包：${kind}`);
   const sources = await Promise.all(entries.map(async (file) => `\n// SOURCE: ${path.relative(ROOT, file)}\n${await readFile(file, "utf8")}`));

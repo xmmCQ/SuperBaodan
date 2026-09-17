@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addTaskMarkdown, deleteTaskMarkdown, moveTaskDateMarkdown, updateTaskMarkdown } from "../lib/task-writer.mjs";
-import { parseWorkTodo } from "../lib/tasks.mjs";
+import { addTaskMarkdown, deleteTaskMarkdown, moveTaskDateMarkdown, updateTaskMarkdown } from "../app/services/domain/task-writer.mjs";
+import { parseWorkTodo } from "../app/services/domain/tasks.mjs";
 
 const source = `- [ ] 普通任务 [[关联文档]] ⏳ 2026-08-27 📅 2026-08-29
 - [x] 已完成任务 📅 2026-08-26 ✅ 2026-08-27

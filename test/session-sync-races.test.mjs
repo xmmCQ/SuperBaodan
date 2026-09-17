@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createAgentClient } from '../public/core/agent-client.js';
-import { createSessionService } from '../public/core/session-service.js';
-import { createHomeChat } from '../public/home/home-chat.js';
+import { createAgentClient } from '../app/renderer/core/agent-client.js';
+import { createSessionService } from '../app/renderer/core/session-service.js';
+import { createHomeChat } from '../app/renderer/home/home-chat.js';
 import { deferred } from './helpers/fake-sdk-host.mjs';
 
 function harness() {
@@ -61,7 +61,7 @@ test('bootstrap and snapshot share sync ordering, including after the await boun
   await assert.rejects(stale, { staleResponse: true });
 });
 
-const chatUrl = new URL('../public/assistant/chat-view.js', import.meta.url);
+const chatUrl = new URL('../app/renderer/assistant/chat-view.js', import.meta.url);
 const source = (await readFile(chatUrl, 'utf8'))
   .replace(/^import \{ repairToolOutputEncoding \}.*$/m, 'const repairToolOutputEncoding = value => value;')
   .replace(/^import \{ createImageAttachments, readFileAsDataUrl \}.*$/m, 'const createImageAttachments = () => ({}); const readFileAsDataUrl = () => {};')
@@ -91,10 +91,10 @@ const flush = () => new Promise(setImmediate);
 for (const firstFails of [false, true]) test(`session mutation queue: B→C cannot complete in reverse; first failure=${firstFails} does not poison latest refresh`, async () => {
   const h = harness(), b = h.service.activate('B'); b.catch(() => {});
   const c = h.service.activate('C');
-  assert.deepEqual(h.requests.map(r => JSON.parse(r.options.body).path), ['B']);
+  assert.deepEqual(h.requests.map(r => r.options.path), ['B']);
   if (firstFails) h.requests[0].reject(new Error('B failed')); else h.requests[0].resolve({ state: { sessionId: 'B' } });
   await assert.rejects(b, { staleResponse: true }); await flush();
-  assert.deepEqual(h.requests.map(r => JSON.parse(r.options.body).path), ['B', 'C']);
+  assert.deepEqual(h.requests.map(r => r.options.path), ['B', 'C']);
   h.requests[1].resolve({ state: { sessionId: 'C' } }); await c;
   const sync = h.service.syncCurrent(); h.resolveSync(2, 'C'); assert.equal((await sync).current(), true);
   assert.equal(h.client.state().sessionId, 'C');
@@ -109,7 +109,7 @@ test('queued session mutations are cancelled across workspace A→B→A, and new
   const sync = h.service.syncCurrent(); h.resolveSync(2, 'fresh'); await sync;
 });
 
-import { createSessionsView } from '../public/assistant/sessions-view.js';
+import { createSessionsView } from '../app/renderer/assistant/sessions-view.js';
 import { chatConsumer, TestNode } from './helpers/chat-consumer.mjs';
 
 test('sessions-view: latest C failure shows original error and reloads actual B after all transitions end', async () => {

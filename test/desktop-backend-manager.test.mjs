@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import { BackendManager } from "../desktop/backend-manager.mjs";
+import { BackendManager } from "../app/main/backend-manager.mjs";
 
 const config = {
   root: "C:\\SuperBaodan Desktop", dataRoot: "C:\\Temp\\sb-test", piAgentDir: "C:\\Temp\\sb-test\\pi-agent",
@@ -86,12 +86,6 @@ test("多次 stop 共用同一个停止过程", async () => {
   const first = manager.stop(), second = manager.stop();
   assert.strictEqual(first, second);
   assert.equal(await first, true);
-});
-
-test("未知服务占用端口时不创建进程也不发送关闭请求", async () => {
-  const { manager, spawns } = harness({ portAvailable: async () => false });
-  await assert.rejects(manager.start(), { code: "PORT_IN_USE" });
-  assert.equal(spawns.length, 0); assert.equal(manager.state, "failed");
 });
 
 test("正常退出与异常退出记录状态", async () => {

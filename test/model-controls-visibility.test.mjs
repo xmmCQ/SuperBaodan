@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createModelsController } from '../public/assistant/models-controller.js';
+import { createModelsController } from '../app/renderer/assistant/models-controller.js';
 
 function node() {
   const classes = new Set();

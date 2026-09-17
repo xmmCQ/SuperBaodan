@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { WorkDocuments } from '../lib/work-documents.mjs';
-import { recycleWorkDocument } from '../lib/recycle-work-document.mjs';
+import { WorkDocuments } from '../app/services/domain/work-documents.mjs';
+import { recycleWorkDocument } from '../app/services/domain/recycle-work-document.mjs';
 
 test('删除入口与回收源文件分离，冲突/失败不丢入口', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'baodan-removal-'));

@@ -1,7 +1,8 @@
 import http from "node:http";
-import { WorkApps } from '../../lib/work-apps.mjs';
-import { WorkDocuments } from '../../lib/work-documents.mjs';
-import { readProjectPrompt, saveProjectPrompt } from '../../lib/project-prompt.mjs';
+import { listenOnSafePort } from './listen.mjs';
+import { WorkApps } from '../../app/services/domain/work-apps.mjs';
+import { WorkDocuments } from '../../app/services/domain/work-documents.mjs';
+import { readProjectPrompt, saveProjectPrompt } from '../../app/services/domain/project-prompt.mjs';
 import { readFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,8 +33,9 @@ export async function createSmokeServer() {
   state.workApps = new WorkApps({ filePath: temp.resolve('work-apps.json'), defaults: [{ id: 'fixture', name: '测试软件', path: 'C:\\Apps\\Test.exe', enabled: true, processes: [] }], launch: async apps => { state.operations.push(...apps.map(app => `app:open:${app.id}`)); return { results: apps.map(app => ({ name: app.name, status: 'started', message: '已发送启动请求' })) }; } });
   state.documentRequests = [];
   state.workDocuments = new WorkDocuments({ filePath: temp.resolve('work-documents.json'), pick: async () => ({ cancelled: true }), recycle: async file => { await rename(file, temp.resolve(`recycled-${path.basename(file)}`)); state.operations.push(`document:recycle:${file}`); }, launch: async file => { state.operations.push(`document:open:${file}`); } });
+  state.workDocuments.pick = async () => ({ cancelled: true });
   const server = http.createServer((req, res) => void handle(req, res, state));
-  await new Promise((resolve, reject) => server.listen(0, "127.0.0.1", resolve).once("error", reject));
+  await listenOnSafePort(server);
   return {
     port: server.address().port,
     state,
@@ -107,14 +109,13 @@ async function handle(req, res, state) {
     if (req.method === "GET" && url.pathname === "/api/workspace/preview") return preview(res, url, state);
     if (req.method === 'GET' && url.pathname === '/api/work-documents') return json(res, 200, await state.workDocuments.read());
     if (req.method === 'PUT' && url.pathname === '/api/work-documents') { const body = await readJson(req); state.documentRequests.push(body); return json(res, 200, await state.workDocuments.save(body)); }
-    if (req.method === 'POST' && url.pathname === '/api/work-documents/pick-file') { await readJson(req); return json(res, 200, await state.workDocuments.chooseFile()); }
+    if (req.method === 'POST' && url.pathname === '/api/work-documents/pick-file') { await readJson(req); const result = await (state.workDocuments.pick?.() || { cancelled: true }); return json(res, 200, result.cancelled ? result : { ...result, name: path.basename(result.path) }); }
     if (req.method === 'POST' && url.pathname === '/api/work-documents/remove') return json(res, 200, await state.workDocuments.remove(await readJson(req)));
     if (req.method === 'POST' && url.pathname === '/api/work-documents/open') return json(res, 200, await state.workDocuments.open(await readJson(req)));
     if (req.method === 'GET' && url.pathname === '/api/apps/config') return json(res, 200, await state.workApps.read());
     if (req.method === 'PUT' && url.pathname === '/api/apps/config') return json(res, 200, await state.workApps.save(await readJson(req)));
     if (req.method === 'POST' && url.pathname === '/api/apps/open') { const body = await readJson(req); return json(res, 200, await state.workApps.run(body.id, body.revision)); }
     if (req.method === "POST" && url.pathname === "/api/apps/open-all") return json(res, 200, await state.workApps.run());
-    if (req.method === "POST" && url.pathname === "/api/system/shutdown") return json(res, 200, { ok: true });
     if (req.method === "GET") return staticFile(url.pathname, res);
     json(res, 404, { error: "接口不存在" });
   } catch (error) {
@@ -252,9 +253,11 @@ async function preview(res, url, state) {
 }
 
 async function staticFile(requestPath, res) {
-  const relative = requestPath === "/" ? "index.html" : decodeURIComponent(requestPath.slice(1));
-  const file = path.resolve(path.join(ROOT, "public"), relative);
-  if (!file.startsWith(path.join(ROOT, "public"))) return json(res, 403, { error: "禁止访问" });
+  const shared = requestPath.startsWith('/shared/');
+  const relative = requestPath === "/" ? "index.html" : decodeURIComponent(requestPath.slice(shared ? 8 : 1));
+  const base = path.join(ROOT, 'app', shared ? 'shared' : 'renderer');
+  const file = path.resolve(base, relative);
+  if (!file.startsWith(base + path.sep)) return json(res, 403, { error: "禁止访问" });
   try { const content = await readFile(file); res.writeHead(200, { "Content-Type": mime(file) }); res.end(content); }
   catch { json(res, 404, { error: "页面不存在" }); }
 }

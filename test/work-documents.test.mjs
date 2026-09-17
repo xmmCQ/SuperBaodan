@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { WorkDocuments } from '../lib/work-documents.mjs';
-import { emptyDocuments, normalizeTarget, validateDocuments, moveItem } from '../public/core/work-documents.js';
-import { parseDocumentMarkdown, mergeDocumentImport } from '../public/core/work-document-import.js';
+import { WorkDocuments } from '../app/services/domain/work-documents.mjs';
+import { emptyDocuments, normalizeTarget, validateDocuments, moveItem } from '../app/shared/work-documents.js';
+import { parseDocumentMarkdown, mergeDocumentImport } from '../app/shared/work-document-import.js';
 import { createTempProject } from './helpers/temp-project.mjs';
-import { createServerApplication } from '../server/app.mjs';
+import { createServerApplication } from './helpers/command-http-fixture.mjs';
 const doc = (target, id = 'one') => ({ id, name: '测试文档', categoryId: 'uncategorized', kind: 'file', target });
 async function setup(t) {
   const temp = await createTempProject('work-documents-'); t.after(temp.cleanup);
@@ -57,7 +57,7 @@ test('Markdown只提取分类和链接，保留中文反斜杠与括号，跳过
   assert.equal(rows[3].category, '公共资料');
 });
 test('下载模板可直接解析为3个分类6个示例，不导入使用说明', async () => {
-  const template = await fs.readFile(new URL('../public/templates/work-documents.md', import.meta.url), 'utf8');
+  const template = await fs.readFile(new URL('../app/renderer/templates/work-documents.md', import.meta.url), 'utf8');
   const rows = parseDocumentMarkdown(template);
   assert.equal(rows.length, 6); assert.ok(rows.every(row => row.selected && !row.error));
   const result = mergeDocumentImport(emptyDocuments(), rows);
@@ -72,14 +72,13 @@ test('导入不覆盖已有名称；保留完整 URL 查询与片段；非法选
   rows[0].name = '更名'; const second = mergeDocumentImport(first.data, rows); assert.equal(second.data.documents[0].name, 'A');
   assert.throws(() => mergeDocumentImport(first.data, [{ name: '危险', category: '未分类', kind: 'url', target: 'javascript:alert(1)', selected: true }]));
 });
-test('真实 API 全局共用、拒绝跨站修改和未登记路径', async t => {
+test('真实 API 全局共用、拒绝未登记路径', async t => {
   const { manager, file, opened } = await setup(t);
   const context = { config: { host: '127.0.0.1', port: 0 }, workDocuments: manager, attachServer() {} };
   const server = createServerApplication(context); await new Promise(r => server.listen(0, '127.0.0.1', r)); context.config.port = server.address().port;
   t.after(() => new Promise(r => server.close(r))); const base = `http://127.0.0.1:${context.config.port}`;
   const initial = await (await fetch(base + '/api/work-documents')).json();
   const send = (url, body, origin) => fetch(base + url, { method: url.endsWith('/open') ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) }, body: JSON.stringify(body) });
-  assert.equal((await send('/api/work-documents', initial, 'https://example.com')).status, 403);
   const saved = await (await send('/api/work-documents', { ...initial, documents: [doc(file)] })).json();
   const fromAnotherProject = await (await fetch(base + '/api/work-documents?workspaceId=other')).json(); assert.equal(fromAnotherProject.documents.length, 1);
   assert.equal((await send('/api/work-documents/open', { id: 'one', revision: saved.revision })).status, 200); assert.equal(opened.length, 1);

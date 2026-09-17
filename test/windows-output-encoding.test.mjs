@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { repairToolOutputEncoding } from "../public/assistant/text-normalization.js";
+import { repairToolOutputEncoding } from "../app/renderer/assistant/text-normalization.js";
 
 test("历史日期工具结果中的乱码星期可恢复显示", () => {
   assert.equal(repairToolOutputEncoding("2026-09-04 ���"), "2026-09-04 星期五");

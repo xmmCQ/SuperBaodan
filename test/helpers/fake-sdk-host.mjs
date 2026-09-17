@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import path from "node:path";
 import { createTempProject } from "./temp-project.mjs";
-import { PiSdkRuntime } from "../../lib/pi-sdk.mjs";
+import { PiSdkRuntime } from "../../app/services/domain/pi-sdk.mjs";
 
 export const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export function deferred() {

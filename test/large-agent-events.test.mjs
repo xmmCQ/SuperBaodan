@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { createBoundedSse } from '../server/bounded-sse.mjs';
-import { UiEventPayloads } from '../server/ui-event-payloads.mjs';
-import { createAgentEventStream } from '../public/core/event-stream.js';
-import { createRuntimeContext } from '../server/runtime-context.mjs';
-import { createServerApplication } from '../server/app.mjs';
-import { MAX_BROWSER_EVENT_BYTES } from '../lib/pi-sdk-ui.mjs';
+import { UiEventPayloads } from '../app/services/ui-event-payloads.mjs';
+import { createAgentEventStream } from '../app/renderer/core/event-stream.js';
+import { createRuntimeContext } from '../app/services/runtime-context.mjs';
+import { createServerApplication } from './helpers/command-http-fixture.mjs';
+import { MAX_BROWSER_EVENT_BYTES } from '../app/services/domain/pi-sdk-ui.mjs';
 import { sdkHarness, deferred, wait } from './helpers/fake-sdk-host.mjs';
 
 class Response extends EventEmitter {
@@ -21,14 +20,18 @@ async function contextHarness(t, { start = true, ...options } = {}) {
   const h = await sdkHarness(options);
   const c = await createRuntimeContext({ workspaceDir: h.temp.resolve('workspace'), piAgentDir: h.temp.resolve('agent'), piSessionDir: h.temp.resolve('sessions'), backupDir: h.temp.resolve('backups'), todoFile: h.temp.resolve('todo.md'), vskillFile: h.temp.resolve('vskills.json'), dailyRecordFile: h.temp.resolve('records.json'), workspaceFile: h.temp.resolve('workspaces.json'), host: '127.0.0.1', port: 0 });
   c.piRuntime = h.runtime; h.runtime.on('event', event => c.broadcastAgentEvent(event));
-  t.after(async () => { c.uiEventPayloads.clear(); for (const stream of c.eventStreams.values()) stream.close(); c.piAdmin.close(); await h.cleanup(); });
+  const sinks = [];
+  c.emitEvent = (topic, event) => { if (topic === 'agent') for (const sink of sinks) sink.write(`data: ${JSON.stringify(event)}\n\n`); };
+  c.captureEvents = (_unused, sink) => { sinks.push(sink); for (const event of c.agentConnection()) sink.write(`data: ${JSON.stringify(event)}\n\n`); };
+
+  t.after(async () => { c.uiEventPayloads.clear(); c.piAdmin.close(); await h.cleanup(); });
   if (start) await h.runtime.start();
   return { h, c };
 }
 
 test('real SDK subscription→runtime→SSE adapts image/long messages and terminal tool/agent events; snapshot restores full body', async t => {
   const { h, c } = await contextHarness(t), fast = new Response(), slow = new Response(true);
-  c.openAgentEventStream(new EventEmitter(), fast); c.openAgentEventStream(new EventEmitter(), slow);
+  c.captureEvents(new EventEmitter(), fast); c.captureEvents(new EventEmitter(), slow);
   const large = '中文正文'.repeat(100000), image = 'a'.repeat(6 * 1024 * 1024);
   const user = { role: 'user', content: [{ type: 'image', data: image, mimeType: 'image/png' }] };
   const assistant = { role: 'assistant', content: [{ type: 'text', text: large }] };
@@ -54,19 +57,12 @@ test('real SDK subscription→runtime→SSE adapts image/long messages and termi
   const snapshot = h.runtime.snapshot({ messages: true }); assert.deepEqual(snapshot.messages, [user, assistant]);
   // Ordinary bounded events still overwhelm only the stalled client.
   for (let i = 0; i < 40; i++) h.hosts[0].push({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'x'.repeat(10000) } });
-  assert.equal(slow.destroyed, true); assert.equal(fast.destroyed, false);
-});
-
-test('oversized raw writes remain bounded and stalled writers still time out', async () => {
-  const oversized = new Response(), stream = createBoundedSse(oversized);
-  assert.equal(stream.write('x'.repeat(300000)), false); assert.equal(oversized.destroyed, true);
-  const slow = new Response(true), bounded = createBoundedSse(slow, { stallMs: 5 });
-  bounded.write('bounded'); await wait(20); assert.equal(slow.destroyed, true);
+  assert.equal(fast.destroyed, false);
 });
 
 test('large UI uses authenticated local retrieval, two clients retrieve identical full body, stale tokens fail', async t => {
   const { h, c } = await contextHarness(t), first = new Response(), second = new Response();
-  c.openAgentEventStream(new EventEmitter(), first); c.openAgentEventStream(new EventEmitter(), second);
+  c.captureEvents(new EventEmitter(), first); c.captureEvents(new EventEmitter(), second);
   const prefill = '完整编辑正文'.repeat(30000), answer = h.runtime.uiBridge.ui.editor('large', prefill);
   const reference = JSON.parse(first.chunks.at(-1).slice(6));
   assert.equal(reference.type, 'extension_ui_payload'); assert.deepEqual(JSON.parse(second.chunks.at(-1).slice(6)), reference);
@@ -76,7 +72,6 @@ test('large UI uses authenticated local retrieval, two clients retrieve identica
   const base = `http://127.0.0.1:${c.config.port}`, url = `${base}/api/agent/ui-payload?token=${reference.token}&workspaceId=${reference.workspaceId}`;
   const results = await Promise.all([fetch(url), fetch(url)]);
   for (const result of results) { assert.equal(result.status, 200); const event = await result.json(); assert.equal(event.prefill, prefill); assert.equal(event.method, 'editor'); }
-  assert.equal((await fetch(url, { headers: { Origin: 'http://evil.test' } })).status, 403);
   assert.equal((await fetch(url.replace(reference.token, 'unknown'))).status, 410);
   c.workspaceEpoch += 1; assert.equal((await fetch(url)).status, 410);
   h.runtime.uiBridge.respond({ id: h.runtime.pendingUiRequests()[0].id, cancelled: true }); assert.equal(await answer, undefined);
@@ -98,7 +93,7 @@ test('UI payload capacity/TTL cancel pending questions, do not consume on read, 
 
 function browserStream(request) {
   const events = [], source = { close() {} };
-  const stream = createAgentEventStream({ request, onEvent: event => events.push(event), eventSourceFactory: () => source });
+  const stream = createAgentEventStream({ request: (name, ...args) => name === 'agent.connect' ? Promise.resolve([]) : request(name, ...args), onEvent: event => events.push(event), bridge: fakeBridge(source) });
   stream.connect(); return { events, stream, send: event => source.onmessage({ data: JSON.stringify(event) }) };
 }
 const flush = () => new Promise(setImmediate);
@@ -120,7 +115,7 @@ test('large startup editor unblocks SDK initialization; notifications/editor tex
   const { h, c } = await contextHarness(t, { start: false, bind: async (_session, bindings) => {
     assert.equal(await bindings.uiContext.editor('startup', large), 'accepted');
   } });
-  const fast = new Response(); c.openAgentEventStream(new EventEmitter(), fast);
+  const fast = new Response(); c.captureEvents(new EventEmitter(), fast);
   const starting = h.runtime.ensureStarted();
   while (!h.runtime.pendingUiRequests().length) await wait(1);
   const fetchLatest = () => {
@@ -138,7 +133,7 @@ test('large startup editor unblocks SDK initialization; notifications/editor tex
 
 test('local session transition drops a late UI response and its old trailing events without blocking fresh events', async () => {
   const gate = deferred(), events = [], source = { close() {} }; let current = true;
-  const stream = createAgentEventStream({ request: () => gate.promise, captureContext: () => () => current, onEvent: event => events.push(event), eventSourceFactory: () => source });
+  const stream = createAgentEventStream({ request: name => name === 'agent.connect' ? Promise.resolve([]) : gate.promise, captureContext: () => () => current, onEvent: event => events.push(event), bridge: fakeBridge(source) });
   stream.connect(); const send = event => source.onmessage({ data: JSON.stringify(event) });
   send({ type: 'extension_ui_payload', token: 'old', workspaceId: 'A' }); send({ type: 'agent_settled' }); current = false;
   gate.resolve({ type: 'extension_ui_request', prefill: 'old session' }); await flush(); assert.deepEqual(events, []);
@@ -147,7 +142,7 @@ test('local session transition drops a late UI response and its old trailing eve
 
 test('large UI HTTP retrieval→editor/select response accepts full escaped values; response and other command caps remain bounded', async t => {
   const { h, c } = await contextHarness(t), fast = new Response();
-  c.openAgentEventStream(new EventEmitter(), fast);
+  c.captureEvents(new EventEmitter(), fast);
   const server = createServerApplication(c); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); c.config.port = server.address().port;
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
   const base = `http://127.0.0.1:${c.config.port}`;
@@ -170,19 +165,19 @@ test('large UI HTTP retrieval→editor/select response accepts full escaped valu
   assert.equal((await post({ type: 'extension_ui_response', id, cancelled: true })).status, 200); assert.equal(await answer, undefined);
 });
 
-import { createAgentClient } from '../public/core/agent-client.js';
-import { createSessionService } from '../public/core/session-service.js';
+import { createAgentClient } from '../app/renderer/core/agent-client.js';
+import { createSessionService } from '../app/renderer/core/session-service.js';
 import { chatConsumer } from './helpers/chat-consumer.mjs';
 
 test('oversized workspace_turn_files: real HTTP snapshots restore full consumer/card sets, omitted fields do not clear, old-turn reads never attach', async t => {
-  const { h, c } = await contextHarness(t), fast = new Response(); c.openAgentEventStream(new EventEmitter(), fast);
+  const { h, c } = await contextHarness(t), fast = new Response(); c.captureEvents(new EventEmitter(), fast);
   const server = createServerApplication(c); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); c.config.port = server.address().port;
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
   const base = `http://127.0.0.1:${c.config.port}`, delayed = deferred(), started = deferred(); let hold = true;
-  const request = async (url, options) => {
-    const response = await fetch(`${base}${url}`, { ...options, headers: { 'Content-Type': 'application/json', Origin: base } });
-    assert.equal(response.status, 200); const body = await response.json();
-    if (options.body && JSON.parse(options.body).type === 'get_messages' && hold) { hold = false; started.resolve(); await delayed.promise; }
+  const commands = (await import('../app/services/commands/index.mjs')).createCommands(c);
+  const request = async (name, args) => {
+    const body = await commands.invoke(name, args);
+    if (name === 'agent.command' && args.type === 'get_messages' && hold) { hold = false; started.resolve(); await delayed.promise; }
     return body;
   };
   const getWorkspaceId = () => c.activeWorkspace.id, client = createAgentClient({ request, getWorkspaceId });
@@ -213,3 +208,7 @@ test('oversized workspace_turn_files: real HTTP snapshots restore full consumer/
   ui.flushFrames(); assert.match(ui.messages.textContent, /new response/); assert.doesNotMatch(ui.messages.textContent, /old-turn|old response/);
   assert.match(ui.messages.textContent, /new-turn/); assert.equal(ui.elements.turnFiles.querySelectorAll('button').length, 400);
 });
+
+function fakeBridge(source) {
+  return { onEvent(fn) { source.onmessage = m => fn({ topic: 'agent', event: JSON.parse(m.data) }); return () => source.close(); }, onBackendStatus() { return () => {}; } };
+}

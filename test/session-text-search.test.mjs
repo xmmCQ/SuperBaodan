@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
-import { searchSessionText } from "../lib/session-text-search.mjs";
-import { createSessionSearch, searchStatus } from "../public/core/session-search.js";
+import { searchSessionText } from "../app/services/domain/session-text-search.mjs";
+import { createSessionSearch, searchStatus } from "../app/renderer/core/session-search.js";
 import { deferred, wait } from "./helpers/fake-sdk-host.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 

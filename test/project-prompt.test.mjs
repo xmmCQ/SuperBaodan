@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createTempProject } from './helpers/temp-project.mjs';
-import { readProjectPrompt, saveProjectPrompt } from '../lib/project-prompt.mjs';
+import { readProjectPrompt, saveProjectPrompt } from '../app/services/domain/project-prompt.mjs';
 import { sdkHarness, deferred, wait } from './helpers/fake-sdk-host.mjs';
 import { createSmokeServer } from './helpers/smoke-server.mjs';
 import { launchBrowser, edgeAvailable } from './helpers/browser-harness.mjs';

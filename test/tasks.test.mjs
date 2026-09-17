@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDashboard, buildDayDetails, parseWorkTodo } from "../lib/tasks.mjs";
+import { buildDashboard, buildDayDetails, parseWorkTodo } from "../app/services/domain/tasks.mjs";
 
 const fixture = `
 - [ ] 今日计划 ⏳ 2026-08-27

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { taskOrderKey, orderedKeys, moveOrder } from '../public/home/card-order.js';
+import { taskOrderKey, orderedKeys, moveOrder } from '../app/renderer/home/card-order.js';
 import { edgeAvailable, launchBrowser } from './helpers/browser-harness.mjs';
 import { createSmokeServer } from './helpers/smoke-server.mjs';
 

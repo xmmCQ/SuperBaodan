@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { createHomeChat } from '../../public/home/home-chat.js';
+import { createHomeChat } from '../../app/renderer/home/home-chat.js';
 
 // Small DOM surface for exercising the actual chat state/render consumers, not
 // layout. Layout dependencies are stubbed; chat functions execute unchanged.
@@ -31,16 +31,16 @@ async function isolatedModule(path, imports) {
   source = source.replace(/from (["'])(\.[^"']+)\1/g, (_m, _q, specifier) => `from ${JSON.stringify(new URL(specifier, url).href)}`);
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 }
-const { createChatView } = await isolatedModule('../../public/assistant/chat-view.js', [
+const { createChatView } = await isolatedModule('../../app/renderer/assistant/chat-view.js', [
   [/^import \{ repairToolOutputEncoding \}.*$/m, 'const repairToolOutputEncoding = value => value;'],
   [/^import \{ createImageAttachments, readFileAsDataUrl \}.*$/m, 'const createImageAttachments = () => ({ clear() {} }); const readFileAsDataUrl = () => {};'],
 ]);
-const { createWorkspaceController } = await isolatedModule('../../public/assistant/workspace-controller.js', [
+const { createWorkspaceController } = await isolatedModule('../../app/renderer/assistant/workspace-controller.js', [
   [/^import \{ createFileTabs \}.*$/m, 'const createFileTabs = () => ({});'],
   [/^import \{ createWorkspacePanel \}.*$/m, 'const createWorkspacePanel = () => ({});'],
   [/^import \{ createSidebarResize \}.*$/m, 'const createSidebarResize = () => {};'],
 ]);
-const mainSource = await readFile(new URL('../../public/assistant/main.js', import.meta.url), 'utf8');
+const mainSource = await readFile(new URL('../../app/renderer/assistant/main.js', import.meta.url), 'utf8');
 const handlerSource = mainSource.slice(mainSource.indexOf('function handleAgentEvent('), mainSource.indexOf('\nfunction updateStateFromAgent('));
 const refreshSource = mainSource.slice(mainSource.indexOf('async function refreshStateAndSessions('), mainSource.indexOf('\nasync function shutdownWorkbench('));
 

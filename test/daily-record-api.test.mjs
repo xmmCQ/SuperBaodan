@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { createServerApplication } from "../server/app.mjs";
-import { DailyRecordManager } from "../lib/daily-record-manager.mjs";
+import { createServerApplication } from "./helpers/command-http-fixture.mjs";
+import { DailyRecordManager } from "../app/services/domain/daily-record-manager.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 test("每日记录API完成创建、查询、搜索、更新、冲突和删除", async (t) => {

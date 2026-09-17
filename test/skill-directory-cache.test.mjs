@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { SkillDirectoryCache } from '../lib/skill-directory-cache.mjs';
+import { SkillDirectoryCache } from '../app/services/domain/skill-directory-cache.mjs';
 import { createTempProject } from './helpers/temp-project.mjs';
 
 async function fixture(t) {

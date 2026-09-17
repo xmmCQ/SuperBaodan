@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { createServer } from "node:http";
-import { PiSdkRuntime } from "../lib/pi-sdk.mjs";
-import { findSdkEntry } from "../lib/pi-sdk-factory.mjs";
+import { PiSdkRuntime } from "../app/services/domain/pi-sdk.mjs";
+import { findSdkEntry } from "../app/services/domain/pi-sdk-factory.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 // Explicit opt-in: uses installed Windows SDK, but only isolated test resources.
@@ -44,7 +44,7 @@ test("真实Windows SDK：扩展UI、工具、会话恢复、设置维护及释�
   await temp.ensureDir("workspace");
   await temp.writeJson("agent/settings.json", { defaultProvider: "fixture", defaultModel: "fixture", enabledModels: ["fixture/*"], defaultTools: ["read", "write", "powershell"], packages: [] });
   await temp.writeJson("agent/models.json", { providers: { fixture: {
-    baseUrl: `http://127.0.0.1:${modelServer.address().port}/v1`, api: "openai-completions", apiKey: "fixture-only-not-a-secret",
+    baseUrl: `http://127.0.0.1:${modelServer.address().port}/v1`, invoke: "openai-completions", apiKey: "fixture-only-not-a-secret",
     models: [{ id: "fixture", name: "Local fixture", reasoning: false, input: ["text"], contextWindow: 32000, maxTokens: 1024, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
   } } });
   await temp.write("workspace/input.txt", "SDK中文文件读取");

@@ -1,11 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { createResponseFallback } from "../public/core/response-fallback.js";
-import { createAgentClient } from "../public/core/agent-client.js";
-import { api, ApiError } from "../public/core/api-client.js";
-import { createBoundedSse } from "../server/bounded-sse.mjs";
-import { PromptReceipts } from "../server/prompt-receipts.mjs";
+import { createResponseFallback } from "../app/renderer/core/response-fallback.js";
+import { createAgentClient } from "../app/renderer/core/agent-client.js";
+import { invoke, ApplicationError } from "../app/renderer/core/service-client.js";
+import { PromptReceipts } from "../app/services/prompt-receipts.mjs";
 import { sdkHarness, deferred, wait } from "./helpers/fake-sdk-host.mjs";
 
 async function until(predicate) {
@@ -62,32 +61,6 @@ test("轻量快照不返回全文、不启动休眠Agent；思考增量不改变
   } finally { await h.cleanup(); }
 });
 
-class Response extends EventEmitter {
-  writableLength = 0; destroyed = false; writableEnded = false; block = true; chunks = [];
-  write(chunk) { this.chunks.push(chunk); this.writableLength += Buffer.byteLength(chunk); return !this.block; }
-  destroy() { this.destroyed = true; this.emit("close"); }
-}
-
-test("SSE尊重背压，drain后按顺序发送，超限只断开慢客户端", () => {
-  const slow = new Response(), fast = new Response(); fast.block = false;
-  const a = createBoundedSse(slow, { maxBufferBytes: 100 }), b = createBoundedSse(fast, { maxBufferBytes: 100 });
-  try {
-    a.write("a".repeat(40)); a.write("b".repeat(40)); assert.equal(slow.chunks.length, 1);
-    a.write("c".repeat(40)); assert.equal(slow.destroyed, true);
-    b.write("ok"); assert.equal(fast.destroyed, false);
-    const res = new Response(), stream = createBoundedSse(res);
-    stream.write("first"); stream.write("second"); stream.write("third");
-    res.writableLength = 0; res.block = false; res.emit("drain");
-    assert.deepEqual(res.chunks, ["first", "second", "third"]); stream.close();
-  } finally { a.close(); b.close(); }
-});
-
-test("SSE长期不drain会断开，避免永久持有缓冲", async () => {
-  const res = new Response(), stream = createBoundedSse(res, { stallMs: 5 });
-  try { stream.write("data"); await until(() => res.destroyed); assert.equal(res.listenerCount("drain"), 0); }
-  finally { stream.close(); }
-});
-
 test("消息回执只标记受理，不代表任务完成；重复ID不重复执行", async () => {
   const receipts = new PromptReceipts(), gate = deferred(); let calls = 0;
   const id = "request-1234567890";
@@ -106,11 +79,11 @@ test("消息回执只标记受理，不代表任务完成；重复ID不重复执
 test("断线丢失ACK时先对账，不自动重发，未知状态明确告知", async () => {
   for (const status of ["accepted", "pending", "unknown"]) {
     let posts = 0, checks = 0;
-    const client = createAgentClient({ request: async (url, options) => {
-      if (url.startsWith("/api/agent/receipt")) { checks += 1; return { status }; }
+    const client = createAgentClient({ request: async (name, args, options) => {
+      if (name === "agent.receipt") { checks += 1; return { status }; }
       posts += 1; assert.equal(options.timeout, 0);
-      assert.ok(JSON.parse(options.body).requestId);
-      throw new ApiError("请求已取消");
+      assert.ok(args.requestId);
+      throw new ApplicationError("操作已取消", { status: 499 });
     } });
     if (status === "accepted") await client.send("hello");
     else await assert.rejects(client.send("hello"), (error) => error.acceptanceUnknown && /勿重复发送/.test(error.message));
@@ -118,13 +91,13 @@ test("断线丢失ACK时先对账，不自动重发，未知状态明确告知",
   }
 });
 
-test("普通GET默认15秒期限，POST不机械套用；显式超时优先", async () => {
-  const originalFetch = globalThis.fetch, originalSetTimeout = globalThis.setTimeout;
+test("IPC默认期限和显式期限可配置", async () => {
+  const originalWindow = globalThis.window, originalSetTimeout = globalThis.setTimeout;
   const deadlines = [];
-  globalThis.fetch = async () => new globalThis.Response("{}");
+  globalThis.window = { workbench: { invoke: async () => ({ ok: true, value: {} }), cancel() {} } };
   globalThis.setTimeout = (callback, ms) => { deadlines.push(ms); return originalSetTimeout(callback, ms); };
   try {
-    await api("/read"); await api("/prompt", { method: "POST" }); await api("/custom", { timeout: 500 });
-    assert.deepEqual(deadlines, [15000, 500]);
-  } finally { globalThis.fetch = originalFetch; globalThis.setTimeout = originalSetTimeout; }
+    await invoke("system.status"); await invoke("agent.command", {}, { timeout: 0 }); await invoke("system.status", {}, { timeout: 500 });
+    assert.deepEqual(deadlines, [120000, 500]);
+  } finally { globalThis.window = originalWindow; globalThis.setTimeout = originalSetTimeout; }
 });

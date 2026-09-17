@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServerApplication } from "../server/app.mjs";
-import { createRuntimeContext } from "../server/runtime-context.mjs";
+import { createServerApplication } from "./helpers/command-http-fixture.mjs";
+import { createRuntimeContext } from "../app/services/runtime-context.mjs";
 import { sdkHarness, deferred } from "./helpers/fake-sdk-host.mjs";
 
 async function createContext(h) {
@@ -52,12 +52,8 @@ test("HTTP健康状态标记SDK，维护期间不唤醒Agent，切换期间仍�
     context.switchCandidateRuntime = h.runtime;
     const question = h.hosts[0].session.bindings.uiContext.confirm("候选工作区", "continue");
     const request = h.runtime.pendingUiRequests()[0];
-    // SSE reconnect replays the same pending id even before workspace commit.
-    const abort = new AbortController();
-    const stream = await fetch(`${base}/api/agent/events`, { signal: abort.signal });
-    const reader = stream.body.getReader();
-    const first = new TextDecoder().decode((await reader.read()).value);
-    assert.ok(first.includes(request.id)); abort.abort();
+    // IPC reconnect replays pending interactive requests before workspace commit.
+    assert.ok(context.agentConnection().some(event => event.id === request.id));
     assert.equal((await command({ type: "prompt", message: "blocked" })).status, 409);
     assert.equal((await command({ type: "extension_ui_response", id: request.id, confirmed: true, workspaceId: "old-workspace" })).status, 200);
     assert.equal(await question, true);

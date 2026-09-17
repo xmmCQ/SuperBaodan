@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { RotatingLogWriter } from "../desktop/log-writer.mjs";
+import { RotatingLogWriter } from "../app/main/log-writer.mjs";
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "sb-log-"));

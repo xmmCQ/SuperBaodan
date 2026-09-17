@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { access } from "node:fs/promises";
 import { sdkHarness, wait, deferred } from "./helpers/fake-sdk-host.mjs";
-import { prepareSdkEnvironment } from "../lib/pi-sdk-factory.mjs";
-import { createSdkUi, toBrowserAgentEvent } from "../lib/pi-sdk-ui.mjs";
-import { AGENT_COMMAND_TYPES } from "../lib/agent-commands.mjs";
+import { prepareSdkEnvironment } from "../app/services/domain/pi-sdk-factory.mjs";
+import { createSdkUi, toBrowserAgentEvent } from "../app/services/domain/pi-sdk-ui.mjs";
+import { AGENT_COMMAND_TYPES } from "../app/services/domain/agent-commands.mjs";
 
 test("SDK工具沿用UTF-8环境且不重复添加Windows包装路径", () => {
   const env = { Path: "C:\\Windows" };

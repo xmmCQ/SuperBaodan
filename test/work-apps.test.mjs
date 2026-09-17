@@ -4,9 +4,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { WorkApps, validateWorkApps } from '../lib/work-apps.mjs';
+import { WorkApps, validateWorkApps } from '../app/services/domain/work-apps.mjs';
 import { createTempProject } from './helpers/temp-project.mjs';
-import { createServerApplication } from '../server/app.mjs';
+import { createServerApplication } from './helpers/command-http-fixture.mjs';
 const apps = [{ id: 'one', name: '测试软件', path: 'C:\\Apps\\测试软件.exe', enabled: true, processes: ['Test'] }, { id: 'two', name: '快捷方式', path: 'D:\\Apps\\Link.lnk', enabled: false, processes: [] }];
 
 test('软件配置校验、版本冲突、备份、排序启用和启动互斥', async t => {
@@ -37,7 +37,7 @@ test('拒绝脚本、相对路径、命令参数、重复ID；允许空格中文
   assert.equal(validateWorkApps([{ ...apps[0], path: '"D:\\测试 文件夹\\快捷方式.lnk"' }])[0].path, 'D:\\测试 文件夹\\快捷方式.lnk');
 });
 
-test('软件API支持配置与单独启动，拒绝跨站启动和错误版本', async t => {
+test('软件API支持配置与单独启动，拒绝错误版本', async t => {
   const temp = await createTempProject('work-apps-api-'); let launched = [];
   const manager = new WorkApps({ filePath: temp.resolve('apps.json'), defaults: apps, launch: async values => { launched = values; return { results: values.map(a => ({ name: a.name, status: 'started', message: '测试启动请求' })) }; } });
   const context = { config: { host: '127.0.0.1', port: 0, publicDir: path.resolve('public') }, workApps: manager, openWorkApps: () => manager.run(), attachServer() {} };
@@ -50,7 +50,6 @@ test('软件API支持配置与单独启动，拒绝跨站启动和错误版本',
   const current = await (await request('/api/apps/config')).json();
   assert.equal((await request('/api/apps/open', 'POST', { id: 'two', revision: current.revision })).status, 200); assert.equal(launched[0].id, 'two');
   assert.equal((await request('/api/apps/open', 'POST', { id: '', revision: current.revision })).status, 400);
-  assert.equal((await request('/api/apps/open-all', 'POST', null, { Origin: 'https://example.invalid' })).status, 403);
   assert.equal((await request('/api/apps/open-all', 'POST')).status, 200); assert.deepEqual(launched.map(a => a.id), ['one']);
 });
 

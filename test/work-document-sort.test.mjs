@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reorderDocumentSlots } from '../public/home/work-document-sort.js';
+import { reorderDocumentSlots } from '../app/renderer/home/work-document-sort.js';
 import { createSmokeServer } from './helpers/smoke-server.mjs';
 import { launchBrowser, edgeAvailable } from './helpers/browser-harness.mjs';
 

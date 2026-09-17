@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { beginReadingResize } from "../public/core/reading-position.js";
+import { beginReadingResize } from "../app/renderer/core/reading-position.js";
 
 test("连续缩放只捕获一次锚点，逐帧不追加回调，结束后清理", (t) => {
   const previous = globalThis.requestAnimationFrame, frames = [];

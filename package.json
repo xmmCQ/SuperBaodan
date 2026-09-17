@@ -3,14 +3,12 @@
   "version": "0.0.5",
   "private": true,
   "type": "module",
-  "main": "desktop/main.mjs",
+  "main": "app/main/main.mjs",
   "description": "集成日历、待办、每日记录和智能助手的 Windows 工作台",
   "scripts": {
-    "start": "node launcher.mjs",
-    "desktop:dev": "electron .",
-    "server": "node server.mjs",
-    "test": "node --test test/*.test.mjs",
-    "test:smoke": "node --test test/browser-smoke.test.mjs",
+    "start": "electron .",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "test:smoke": "node --test --test-concurrency=1 test/service-process.test.mjs test/ipc-policy.test.mjs test/browser-smoke.test.mjs",
     "test:sdk": "node --input-type=module -e \"process.env.SUPER_BAODAN_TEST_SDK='1'; await import('./test/pi-sdk-integration.test.mjs')\""
   },
   "engines": {

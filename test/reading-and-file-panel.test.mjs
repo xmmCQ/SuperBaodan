@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeReading } from "../public/core/reading-settings.js";
-import { clampPanelWidth, panelBounds } from "../public/assistant/workspace-panel.js";
-import { fileTabKey } from "../public/assistant/file-tabs.js";
+import { normalizeReading } from "../app/renderer/core/reading-settings.js";
+import { clampPanelWidth, panelBounds } from "../app/renderer/assistant/workspace-panel.js";
+import { fileTabKey } from "../app/renderer/assistant/file-tabs.js";
 import { edgeAvailable, launchBrowser } from "./helpers/browser-harness.mjs";
 import { createSmokeServer } from "./helpers/smoke-server.mjs";
 

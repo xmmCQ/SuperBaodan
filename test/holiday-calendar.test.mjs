@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createTempProject } from './helpers/temp-project.mjs';
-import { createHolidayCalendar, validateHolidayData, holidaySources } from '../lib/holiday-calendar.mjs';
-import { holidayInfo } from '../public/home/holiday-marks.js';
-import { createServerApplication } from '../server/app.mjs';
+import { createHolidayCalendar, validateHolidayData, holidaySources } from '../app/services/domain/holiday-calendar.mjs';
+import { holidayInfo } from '../app/renderer/home/holiday-marks.js';
+import { createServerApplication } from './helpers/command-http-fixture.mjs';
 
 const data = { region: 'CN', year: 2026, dates: [
   { date: '2026-09-04', name_cn: '测试放假', type: 'public_holiday' },
@@ -44,7 +44,7 @@ test('过期缓存立即返回，更新失败不覆盖旧数据且冷却重试',
   assert.equal(result.status, 'available'); assert.match(result.warning, /更新失败/); assert.equal(calls, 3);
   assert.equal(await fs.readFile(path.join(root, '2026.json'), 'utf8'), original);
 });
-test('节假日API读取隔离缓存并校验年份和本机来源', async (t) => {
+test('节假日API读取隔离缓存并校验年份', async (t) => {
   const root = await setup(t);
   await fs.writeFile(path.join(root, '2026.json'), JSON.stringify({ ...data, fetchedAt: new Date().toISOString(), source: holidaySources(2026)[0] }));
   const context = { config: { host: '127.0.0.1', port: 0, holidayCacheDir: root, publicDir: path.resolve('public') }, attachServer() {} };
@@ -56,7 +56,6 @@ test('节假日API读取隔离缓存并校验年份和本机来源', async (t) =
   const result = await fetch(`${base}?year=2026`);
   assert.equal(result.status, 200); assert.equal((await result.json()).status, 'available');
   assert.equal((await fetch(`${base}?year=../2026`)).status, 400);
-  assert.equal((await fetch(`${base}?year=2026`, { headers: { Origin: 'https://example.invalid' } })).status, 403);
 });
 
 test('读取正文超时切换来源，缓存保存失败仍可使用已获取数据', async (t) => {

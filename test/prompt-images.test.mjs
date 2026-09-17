@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
-import { validatePromptPayload, validatePromptImages, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES } from '../public/core/prompt-images.js';
-import { readJsonBody } from '../server/response.mjs';
-import { createServerApplication } from '../server/app.mjs';
+import { validatePromptPayload, validatePromptImages, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES } from '../app/shared/prompt-images.js';
+import { validateInvocation } from '../app/main/ipc-policy.mjs';
+import { createServerApplication } from './helpers/command-http-fixture.mjs';
 import { createSmokeServer } from './helpers/smoke-server.mjs';
 import { launchBrowser, edgeAvailable } from './helpers/browser-harness.mjs';
 const image = size => ({ type: 'image', mimeType: 'image/png', data: Buffer.alloc(size, 1).toString('base64') });
@@ -16,7 +16,7 @@ test('统一图片限制支持800KiB，校验数量、单张、总量、类型�
   validatePromptImages([image(MAX_TOTAL_IMAGE_BYTES / 2), image(MAX_TOTAL_IMAGE_BYTES / 2)]);
   assert.throws(() => validatePromptImages([{ ...image(1), mimeType: 'image/svg+xml' }]), { statusCode: 400 });
   assert.throws(() => validatePromptImages([{ ...image(1), data: 'invalid?' }]), { statusCode: 400 });
-  await assert.rejects(readJsonBody(Readable.from([Buffer.alloc(1024 * 1024 + 1)])), { statusCode: 413 });
+  assert.throws(() => validateInvocation({ id: 'test', name: 'system.status', args: { content: 'x'.repeat(1024*1024) } }), { statusCode: 413 });
 });
 test('HTTP图片请求超过旧1MiB限制仍可发送，超出单张限制明确413', async t => {
   let sends = 0;

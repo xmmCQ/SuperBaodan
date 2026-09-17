@@ -1,109 +1,42 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { api, ApiError, workspacePayload, workspaceUrl } from "../public/core/api-client.js";
-import { createAgentClient } from "../public/core/agent-client.js";
-import { createAgentEventStream } from "../public/core/event-stream.js";
-import { createSessionService } from "../public/core/session-service.js";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { invoke, ApplicationError, workspacePayload, scopedResource } from '../app/renderer/core/service-client.js';
+import { createAgentEventStream } from '../app/renderer/core/event-stream.js';
+import { createAgentClient } from '../app/renderer/core/agent-client.js';
+import { createSessionService } from '../app/renderer/core/session-service.js';
 
-
-class FakeEventSource {
-  constructor(url) { this.url = url; this.closed = false; }
-  close() { this.closed = true; }
-}
-
-test("共享API模块注入工作区并保留查询参数", () => {
-  assert.equal(workspaceUrl("/api/sessions", "工作区 1"), "/api/sessions?workspaceId=%E5%B7%A5%E4%BD%9C%E5%8C%BA%201");
-  assert.equal(workspaceUrl("/api/tree?depth=4", "w1"), "/api/tree?depth=4&workspaceId=w1");
-  assert.deepEqual(workspacePayload({ type: "prompt" }, "w1"), { type: "prompt", workspaceId: "w1" });
-  assert.deepEqual(workspacePayload({ type: "prompt" }, null), { type: "prompt" });
+test('请求参数携带工作区，资源地址不包含文件绝对路径', () => {
+  assert.deepEqual(workspacePayload({ type: 'prompt' }, 'w1'), { type: 'prompt', workspaceId: 'w1' });
+  assert.equal(scopedResource('app://workbench/content?path=a.png', 'w1'), 'app://workbench/content?path=a.png&workspaceId=w1');
 });
-
-test("共享API模块统一解析错误并保留状态码", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ error: "请求冲突" }), { status: 409, headers: { "Content-Type": "application/json" } });
-  try {
-    await assert.rejects(api("/api/test"), (error) => error instanceof ApiError && error.status === 409 && error.message === "请求冲突");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('IPC错误码、超时及取消统一处理', async t => {
+  const original = globalThis.window; t.after(() => { globalThis.window = original; });
+  let cancelled = 0;
+  globalThis.window = { workbench: { invoke: async () => ({ ok: false, error: { code: 409, message: '冲突' } }), cancel() { cancelled++; } } };
+  await assert.rejects(invoke('records.save'), error => error instanceof ApplicationError && error.status === 409);
+  window.workbench.invoke = () => new Promise(() => {});
+  await assert.rejects(invoke('system.status', {}, { timeout: 5 }), /操作超时/);
+  const abort = new AbortController(); const flight = invoke('system.status', {}, { signal: abort.signal }); abort.abort();
+  await assert.rejects(flight, /操作已取消/); assert.equal(cancelled, 2);
 });
-
-test("共享API模块支持超时和调用方取消", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (_path, options) => new Promise((_resolve, reject) => {
-    options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
-  });
-  try {
-    await assert.rejects(api("/api/slow", { timeout: 5 }), /请求超时/);
-    const controller = new AbortController();
-    const pending = api("/api/cancel", { signal: controller.signal });
-    controller.abort();
-    await assert.rejects(pending, /请求已取消/);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('事件通道只订阅一次，关闭后释放监听器', async () => {
+  let event, status, released = 0; const received = [], states = [];
+  const bridge = { onEvent(fn) { event = fn; return () => { released++; }; }, onBackendStatus(fn) { status = fn; return () => { released++; }; } };
+  const stream = createAgentEventStream({ bridge, request: async () => [], onEvent: e => received.push(e), onStatus: s => states.push(s) });
+  assert.strictEqual(stream.connect(), stream.connect()); await new Promise(setImmediate);
+  event({ topic: 'agent', event: { type: 'agent_start' } }); assert.equal(received[0].type, 'agent_start');
+  status({ state: 'disconnected' }); stream.close(); assert.equal(released, 2);
+  assert.deepEqual(states, ['connecting', 'open', 'reconnecting', 'closed']);
 });
-
-test("SSE客户端只创建一个连接并统一解析事件", () => {
-  const sources = [];
-  const events = [];
-  const statuses = [];
-  const stream = createAgentEventStream({
-    onEvent: (event) => events.push(event),
-    onStatus: (status, detail) => statuses.push([status, detail.reconnected]),
-    eventSourceFactory: (url) => { const source = new FakeEventSource(url); sources.push(source); return source; },
-  });
-  const first = stream.connect();
-  assert.equal(stream.connect(), first);
-  assert.equal(sources.length, 1);
-  first.onopen();
-  first.onmessage({ data: JSON.stringify({ type: "agent_start" }) });
-  assert.deepEqual(events, [{ type: "agent_start" }]);
-  first.onerror(new Error("断线"));
-  stream.close();
-  assert.equal(first.closed, true);
-  assert.deepEqual(statuses.map(([status]) => status), ["connecting", "open", "reconnecting", "closed"]);
-});
-
-test("Agent客户端将首页和展开助手共用的事件归一为一致状态", () => {
+test('Agent事件统一更新忙碌和停止状态', () => {
   const client = createAgentClient({ request: async () => ({}) });
-  assert.equal(client.applyEvent({ type: "agent_start" }).running, true);
-  const settled = client.applyEvent({ type: "agent_settled" });
-  assert.equal(settled.running, false);
-  assert.equal(settled.streaming, false);
-  assert.equal(settled.runtimeState, "ready");
-  assert.equal(client.applyEvent({ type: "runtime_idle" }).runtimeState, "idle");
-  assert.equal(client.applyEvent({ type: "runtime_exit" }).runtimeState, "error");
+  assert.equal(client.applyEvent({ type: 'agent_start' }).running, true);
+  assert.equal(client.applyEvent({ type: 'agent_settled' }).running, false);
 });
-
-test("会话服务统一封装列表、新建、激活、改名、删除和消息同步", async () => {
+test('会话命令始终携带工作区，保留顺序协调', async () => {
   const calls = [];
-  const request = async (path, options = {}) => {
-    calls.push([path, options]);
-    if (path.startsWith("/api/sessions?")) return { sessions: [{ id: "s1" }] };
-    return { activeDeleted: false };
-  };
-  const agentClient = {
-    getState: async () => ({ sessionId: "s1", isStreaming: false }),
-    getMessages: async () => ({ messages: [{ role: "user", content: "你好" }] }),
-    applyAgentState: () => {},
-  };
-  const service = createSessionService({ request, agentClient, getWorkspaceId: () => "w1" });
-  assert.deepEqual(await service.list(), [{ id: "s1" }]);
-  await service.create();
-  await service.activate("a.jsonl");
-  await service.rename("a.jsonl", "新名称");
-  await service.remove("a.jsonl");
-  const synced = await service.syncCurrent();
-  assert.equal(synced.state.sessionId, "s1");
-  assert.equal(synced.messages.length, 1);
-  assert.deepEqual(calls.map(([path]) => path), [
-    "/api/sessions?workspaceId=w1",
-    "/api/agent/new",
-    "/api/sessions/activate",
-    "/api/sessions/rename",
-    "/api/sessions",
-  ]);
-  for (const [, options] of calls.slice(1)) assert.match(options.body, /"workspaceId":"w1"/);
+  const service = createSessionService({ getWorkspaceId: () => 'w1', agentClient: {}, request: async (name, args) => { calls.push([name,args]); return { sessions: [] }; } });
+  await service.list(); await service.create(); await service.activate('a.jsonl'); await service.rename('a.jsonl','name'); await service.remove('a.jsonl');
+  assert.deepEqual(calls.map(([n]) => n), ['sessions.list','agent.new','sessions.activate','sessions.rename','sessions.delete']);
+  for (const [,args] of calls) assert.equal(args.workspaceId, 'w1');
 });
-

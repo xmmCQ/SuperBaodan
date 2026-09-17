@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { SkillManager, buildSkillMarkdown, parseSkillMarkdown } from '../lib/skill-manager.mjs';
-import { skillTreeDigest, transferSkillDirectory } from '../lib/skill-transfer.mjs';
+import { SkillManager, buildSkillMarkdown, parseSkillMarkdown } from '../app/services/domain/skill-manager.mjs';
+import { skillTreeDigest, transferSkillDirectory } from '../app/services/domain/skill-transfer.mjs';
 import { createTempProject } from './helpers/temp-project.mjs';
-import { createServerApplication } from '../server/app.mjs';
+import { createServerApplication } from './helpers/command-http-fixture.mjs';
 
 async function fixture(t) {
   const temp = await createTempProject('skill-transfer-'); t.after(temp.cleanup);

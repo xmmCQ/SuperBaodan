@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HOLIDAY_CACHE_KEY, readHolidayCache, writeHolidayCache, validHolidaySnapshot } from '../public/home/holiday-cache.js';
+import { HOLIDAY_CACHE_KEY, readHolidayCache, writeHolidayCache, validHolidaySnapshot } from '../app/renderer/home/holiday-cache.js';
 import { edgeAvailable, launchBrowser } from './helpers/browser-harness.mjs';
 import { createSmokeServer } from './helpers/smoke-server.mjs';
 const snapshot = (year = 2026) => ({ year, region: 'CN', status: 'available', fetchedAt: new Date().toISOString(), dates: [{ date: `${year}-09-05`, name: '测试日期', type: 'public_holiday' }] });
@@ -36,7 +36,7 @@ test('刷新后同步显示浏览器缓存，后台成功替换，失败或无�
     const section=document.createElement('section');document.body.append(section);
     const grid=document.createElement('div');section.append(grid);grid.innerHTML='<button data-date="2026-09-05" aria-label="测试日期"></button>';
     window.cacheGrid=grid;window.cacheButton=grid.firstElementChild;window.cacheSection=section;
-    const marks=createHolidayMarks({container:grid,api:()=>new Promise((resolve,reject)=>{window.resolveHoliday=resolve;window.rejectHoliday=reject;})});marks.refresh();
+    const marks=createHolidayMarks({container:grid,invoke:()=>new Promise((resolve,reject)=>{window.resolveHoliday=resolve;window.rejectHoliday=reject;})});marks.refresh();
     return grid.querySelector('.holiday-badge')?.textContent||'';
   })()`);
   await open(); assert.equal(await mount(), '');

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createHomeChat } from "../public/home/home-chat.js";
+import { createHomeChat } from "../app/renderer/home/home-chat.js";
 
 class ScrollBox {
   constructor() {
@@ -17,13 +17,13 @@ class ScrollBox {
   scrollTo({ top }) { this.scrollTop = top; }
 }
 
-const homeSource = await readFile(new URL("../public/home/home-chat.js", import.meta.url), "utf8");
-const assistantSource = await readFile(new URL("../public/assistant/chat-view.js", import.meta.url), "utf8");
+const homeSource = await readFile(new URL("../app/renderer/home/home-chat.js", import.meta.url), "utf8");
+const assistantSource = await readFile(new URL("../app/renderer/assistant/chat-view.js", import.meta.url), "utf8");
 const assistantModuleSource = assistantSource
   .replace(/^import .*$/m, "const repairToolOutputEncoding = (value) => value;")
   // This unit harness exercises scrolling only; attachment behavior has browser coverage.
   .replace(/^import \{ createImageAttachments, readFileAsDataUrl \}.*$/m, 'const createImageAttachments = () => ({ add() {}, render() {}, clear() {} }); const readFileAsDataUrl = () => {};')
-  .replace(/from (["'])(\.[^"']+)\1/g, (_match, _quote, specifier) => `from ${JSON.stringify(new URL(specifier, new URL('../public/assistant/chat-view.js', import.meta.url)).href)}`);
+  .replace(/from (["'])(\.[^"']+)\1/g, (_match, _quote, specifier) => `from ${JSON.stringify(new URL(specifier, new URL('../app/renderer/assistant/chat-view.js', import.meta.url)).href)}`);
 const { createChatView } = await import(`data:text/javascript;base64,${Buffer.from(assistantModuleSource).toString("base64")}`);
 
 test("首页对话在用户上翻后暂停跟随，回到底部后恢复", () => {

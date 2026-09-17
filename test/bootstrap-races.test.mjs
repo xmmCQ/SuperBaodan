@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAgentClient } from '../public/core/agent-client.js';
-import { createBootstrapLoader } from '../public/core/bootstrap-loader.js';
+import { createAgentClient } from '../app/renderer/core/agent-client.js';
+import { createBootstrapLoader } from '../app/renderer/core/bootstrap-loader.js';
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { resolve, reject, promise }; };
 const data = id => ({ workspace: { id }, state: { sessionId: `${id}-session` }, messages: [] });
 

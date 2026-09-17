@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
-import { buildConversationOutline, questionLabel, replyHeadings } from "../public/core/conversation-directory.js";
-import { quotedPrompt } from "../public/core/reply-actions.js";
+import { buildConversationOutline, questionLabel, replyHeadings } from "../app/renderer/core/conversation-directory.js";
+import { quotedPrompt } from "../app/renderer/core/reply-actions.js";
 import { edgeAvailable, launchBrowser } from "./helpers/browser-harness.mjs";
 import { createSmokeServer } from "./helpers/smoke-server.mjs";
 
 const sandbox = {};
-vm.runInNewContext(await readFile(new URL("../public/vendor/markdown-it-14.1.0.min.js", import.meta.url), "utf8"), sandbox);
+vm.runInNewContext(await readFile(new URL("../app/renderer/vendor/markdown-it-14.1.0.min.js", import.meta.url), "utf8"), sandbox);
 const engine = sandbox.markdownit({ html: false });
 const parse = (text) => engine.parse(text, {});
 const report = (i) => `# 一级标题 ${i}\n\n${"长篇报告内容。".repeat(35)}\n\n## 二级标题 ${i}\n\n${"进一步说明。".repeat(35)}\n\n### 不进目录的三级标题\n\n\`\`\`md\n# 代码里的假标题\n\`\`\``;

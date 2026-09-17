@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRuntimeContext } from '../server/runtime-context.mjs';
+import { createRuntimeContext } from '../app/services/runtime-context.mjs';
 import { createTempProject } from './helpers/temp-project.mjs';
 import { deferred } from './helpers/fake-sdk-host.mjs';
 

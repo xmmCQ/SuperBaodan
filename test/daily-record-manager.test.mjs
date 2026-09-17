@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
-import { DailyRecordManager } from "../lib/daily-record-manager.mjs";
+import { DailyRecordManager } from "../app/services/domain/daily-record-manager.mjs";
 import { createTempProject } from "./helpers/temp-project.mjs";
 
 async function fixture(t) {

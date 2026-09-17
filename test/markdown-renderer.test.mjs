@@ -4,14 +4,14 @@ import vm from "node:vm";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-const vendorUrl = new URL("../public/vendor/markdown-it-14.1.0.min.js", import.meta.url);
+const vendorUrl = new URL("../app/renderer/vendor/markdown-it-14.1.0.min.js", import.meta.url);
 const vendorSource = await readFile(vendorUrl, "utf8");
-const vendorLicense = await readFile(new URL("../public/vendor/markdown-it-LICENSE.txt", import.meta.url), "utf8");
+const vendorLicense = await readFile(new URL("../app/renderer/vendor/markdown-it-LICENSE.txt", import.meta.url), "utf8");
 const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(vendorSource, sandbox);
 globalThis.markdownit = sandbox.markdownit;
-const { markdownToSafeHtml, markdownBodyWithoutFrontmatter, MAX_MARKDOWN_LENGTH } = await import(`../public/markdown-renderer.js?test=${Date.now()}`);
+const { markdownToSafeHtml, markdownBodyWithoutFrontmatter, MAX_MARKDOWN_LENGTH } = await import(`../app/renderer/markdown-renderer.js?test=${Date.now()}`);
 
 test("内置固定版本markdown-it并保留许可证", () => {
   assert.equal(createHash("sha256").update(vendorSource).digest("hex"), "38c70a1e7ca91ab40e2d9e6e60129851a717ed1c7d4acbbdd41bf9503791cf68");

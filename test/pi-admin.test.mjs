@@ -8,7 +8,7 @@ import {
   piPackageRoot,
   redactSecrets,
   validateAndNormalizeModelsConfig,
-} from "../lib/pi-admin.mjs";
+} from "../app/services/domain/pi-admin.mjs";
 
 test("piPackageRoot honors explicit Windows Pi package", () => {
   assert.equal(piPackageRoot({ SUPER_BAODAN_PI_PACKAGE: "C:\\Pi" }), "C:\\Pi");
@@ -52,7 +52,7 @@ test("redactSecrets masks keys and sensitive headers and merge restores them", (
 });
 
 test("validateAndNormalizeModelsConfig preserves unknown fields and completes cost", () => {
-  const value = validateAndNormalizeModelsConfig({ providers: { demo: { baseUrl: "https://example.com", api: "openai-completions", extra: { future: true }, models: [{ id: "m1", unknown: 7, cost: { input: 1 } }] } } });
+  const value = validateAndNormalizeModelsConfig({ providers: { demo: { baseUrl: "https://example.com", invoke: "openai-completions", extra: { future: true }, models: [{ id: "m1", unknown: 7, cost: { input: 1 } }] } } });
   assert.equal(value.providers.demo.extra.future, true);
   assert.equal(value.providers.demo.models[0].unknown, 7);
   assert.deepEqual(value.providers.demo.models[0].cost, { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 });

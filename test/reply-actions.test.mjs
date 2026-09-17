@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { messageBodyText, quotedPrompt } from "../public/core/reply-actions.js";
+import { messageBodyText, quotedPrompt } from "../app/renderer/core/reply-actions.js";
 import { edgeAvailable, launchBrowser } from "./helpers/browser-harness.mjs";
 import { createSmokeServer } from "./helpers/smoke-server.mjs";
 

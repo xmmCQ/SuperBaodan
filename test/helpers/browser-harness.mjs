@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createTempProject } from "./temp-project.mjs";
+import { FIXTURE_OPERATIONS } from './fixture-operations.mjs';
 
 const EDGE_CANDIDATES = process.platform === "win32"
   ? [
@@ -54,6 +55,30 @@ export async function launchBrowser({ width, height } = {}) {
     await connection.command("Runtime.enable");
     await connection.command("Page.enable");
     await connection.command("Network.enable");
+    await connection.command('Page.addScriptToEvaluateOnNewDocument', { source: `
+      const operations = ${JSON.stringify(FIXTURE_OPERATIONS)};
+      const pending = new Map();
+      window.workbench = {
+        async invoke(id, name, args = {}) {
+          if (name === 'agent.connect') return { ok: true, value: [] };
+          const route = operations[name];
+          if (!route) return { ok: false, error: { code: 404, message: name } };
+          const [verb, resource] = route.split(' ');
+          const url = new URL(resource.replace(':id', encodeURIComponent(args.id || '')), location.origin);
+          const controller = new AbortController(); pending.set(id, controller);
+          const options = { method: verb.toUpperCase(), signal: controller.signal };
+          if (verb === 'get' || name === 'files.upload') for (const [key,value] of Object.entries(args)) if (key !== 'content' && value != null) url.searchParams.set(key, value);
+          if (name === 'files.upload') options.body = args.content;
+          else if (verb !== 'get') { options.headers = { 'Content-Type': 'application/json' }; options.body = JSON.stringify(args); }
+          try { const res = await fetch(url.pathname + url.search, options); const value = await res.json(); return res.ok ? { ok: true, value } : { ok: false, error: { code: res.status, message: value.error } }; }
+          finally { pending.delete(id); }
+        },
+        cancel: id => pending.get(id)?.abort(),
+        onEvent(listener) { const source = new EventSource('/api/agent/events'); source.onmessage = e => listener({ topic: 'agent', event: JSON.parse(e.data) }); return () => source.close(); },
+        onBackendStatus() { return () => {}; },
+        openExternal: async () => ({}),
+      };
+    ` });
   } catch (error) {
     connection?.close();
     child.kill("SIGKILL");

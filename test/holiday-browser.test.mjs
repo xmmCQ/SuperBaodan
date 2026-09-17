@@ -23,7 +23,7 @@ test('日历异步标休班不重建日期按钮，跨年缺数据提示且保�
   assert.equal(await browser.evaluate('window.holidayButton===calendarGrid.querySelector("[data-date]")'), true);
   // Use the calendar controller to render a deterministic month for these fixtures.
   await browser.evaluate(`(async()=>{window.holidayModule=await import('/home/calendar.js'); window.holidayState={month:'2026-09',today:'2026-09-04',selectedDate:'2026-09-04',dashboard:{events:[],pendingByDate:{}}};
-    window.testCalendar=holidayModule.createCalendar({state:holidayState,elements:{calendarGrid,monthTitle},api:async url=>(await fetch(url)).json(),toLocalDate:d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'),formatChineseDate:d=>d,loadDay:d=>window.clickedHolidayDate=d});testCalendar.renderCalendar();})()`);
+    window.testCalendar=holidayModule.createCalendar({state:holidayState,elements:{calendarGrid,monthTitle},invoke:async url=>(await fetch(url)).json(),toLocalDate:d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'),formatChineseDate:d=>d,loadDay:d=>window.clickedHolidayDate=d});testCalendar.renderCalendar();})()`);
   await browser.waitFor("calendarGrid.querySelector('[data-date=\"2026-09-05\"] .holiday-badge')?.textContent==='班'");
   const marks = await browser.evaluate(`['2026-09-04','2026-09-05','2026-09-06','2026-09-07'].map(d=>calendarGrid.querySelector('[data-date="'+d+'"] .holiday-badge')?.textContent||'')`);
   assert.deepEqual(marks, ['休', '班', '休', '']);

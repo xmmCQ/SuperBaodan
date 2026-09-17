@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AGENT_COMMAND_TYPES, assertAllowedAgentCommand } from "../lib/agent-commands.mjs";
+import { AGENT_COMMAND_TYPES, assertAllowedAgentCommand } from "../app/services/domain/agent-commands.mjs";
 
 test("agent command whitelist保留普通会话命令", () => {
   for (const type of ["get_messages", "set_session_name", "get_session_stats"]) {

@@ -14,7 +14,7 @@ import {
   updateStructuredSkillMarkdown,
   validateSkillName,
   validateSkillPackage,
-} from "../lib/skill-manager.mjs";
+} from "../app/services/domain/skill-manager.mjs";
 
 async function tempRoot(t, prefix) {
   const temp = await createTempProject(prefix);

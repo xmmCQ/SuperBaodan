@@ -1,27 +1,14 @@
-<h1 align="center"><img src="public/baodan-avatar.png" width="96" alt="超级宝蛋"><br>超级宝蛋</h1>
+<h1 align="center"><img src="app/renderer/baodan-avatar.png" width="96" alt="超级宝蛋"><br>超级宝蛋</h1>
 
 Windows 个人工作台，集中管理日历、待办、每日记录、工作文档、常用软件和智能助手。
 
-<p align="center"><a href="https://github.com/xmmCQ/SuperBaodan/releases/latest">下载 Windows 安装包</a></p>
+使用独立窗口运行。关闭窗口后驻留托盘，任务继续执行；从托盘菜单退出应用。
+
+## 启动
+
+安装包暂未提供。在项目目录执行 `npm start` 启动桌面应用。
 
 ![超级宝蛋首页](docs/screenshots/home.png)
-
-## 安装与使用
-
-支持 Windows 10 1809 或更新版本的 64 位系统。
-
-1. 下载并运行 **`SuperBaodan.exe`**，按提示完成安装。
-2. 从开始菜单或桌面快捷方式打开“超级宝蛋”。
-3. 在助手设置中登录模型账号或填写 API Key，选择模型。模型使用可能需要订阅或接口额度。
-4. 按需添加工作区、工作软件、文档入口和常用 Skill。
-
-默认安装目录为 `%LOCALAPPDATA%\Programs\SuperBaodan`，个人数据保存在 `%LOCALAPPDATA%\SuperBaodan`。
-
-### 更新与卸载
-
-更新前请备份个人数据并退出“超级宝蛋”，再运行新版安装包。
-
-卸载默认保留个人数据。勾选“同时删除本软件的个人数据和登录信息”并确认后，会删除待办、记录、会话、配置、登录信息及默认工作区文件。**删除不可恢复，请先备份。** 外部工作文件夹保持不变。
 
 ## 产品功能
 
