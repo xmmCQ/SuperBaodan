@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createCommands } from '../app/services/commands/index.mjs';
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { searchSessionText } from "../app/services/domain/session-text-search.mjs";
@@ -84,6 +85,39 @@ test("旧搜索取消会停止扫描，外部编辑后新请求读取最新内�
     await writeFile(file, [{ type: "session", id: "a", cwd }, message("user", "新文本", "new")].map(JSON.stringify).join("\n") + "\n");
     assert.equal((await searchSessionText(options)).hits[0].entryId, "new");
   } finally { await temp.cleanup(); }
+});
+
+test('命令分发：扫描开始后取消传到搜索，连续取消释放所有并发名额', async t => {
+  const temp = await createTempProject(); t.after(() => temp.cleanup());
+  const cwd = temp.resolve('workspace');
+  await writeSession(temp, 'scan', cwd, [message('user', '目标文本', 'entry')]);
+  const context = { activeWorkspace: { id: 'A', canonicalRoot: cwd }, assertActiveWorkspace() {}, config: { piSessionDir: temp.resolve('sessions') } };
+  const commands = createCommands(context);
+  for (let round = 0; round < 4; round++) {
+    const controllers = [new AbortController(), new AbortController()];
+    const flights = controllers.map(c => commands.invoke('sessions.search', { q: '目标' }, c.signal));
+    assert.equal(context.activeSessionSearches, 2);
+    const rejected = flights.map(p => assert.rejects(p, { statusCode: 499 }));
+    controllers.forEach(c => c.abort()); await Promise.all(rejected);
+    assert.equal(context.activeSessionSearches, 0);
+  }
+  assert.equal((await commands.invoke('sessions.search', { q: '目标' })).hits.length, 1);
+  assert.equal(context.activeSessionSearches, 0);
+});
+
+test('命令分发：提前取消不执行，已提交写入不因迟到取消报错，真实错误不改成取消', async () => {
+  const controller = new AbortController(), failed = new AbortController(); let calls = 0;
+  const commands = createCommands({ workDocuments: {
+    read() { calls++; return { read: true }; },
+    save() { calls++; controller.abort(); return { saved: true }; },
+    remove() { failed.abort(); throw Object.assign(new Error('disk failed'), { statusCode: 500 }); },
+  } });
+  const cancelled = new AbortController(); cancelled.abort();
+  await assert.rejects(commands.invoke('documents.read', {}, cancelled.signal), { statusCode: 499 });
+  assert.equal(calls, 0);
+  assert.deepEqual(await commands.invoke('documents.read'), { read: true });
+  assert.deepEqual(await commands.invoke('documents.save', {}, controller.signal), { saved: true });
+  await assert.rejects(commands.invoke('documents.remove', {}, failed.signal), { statusCode: 500 });
 });
 
 class SearchNode {

@@ -25,7 +25,14 @@ export function createCommands(context) {
       if (context.workspaceSwitching && !['system.status', 'agent.connect', 'agent.command', 'agent.receipt', 'agent.uiPayload', 'workspaces.activate'].includes(name)) throw fault(409, '工作区正在切换，请稍后重试');
       if (context.piAdmin?.maintenanceActive && ['agent.bootstrap', 'agent.new', 'sessions.rename', 'sessions.delete', 'sessions.activate'].includes(name)) throw fault(409, '登录或配置维护中，请稍后重试');
       if (signal?.aborted) throw fault(499, '操作已取消');
-      return commands.get(name)(args, context);
+      try {
+        return await commands.get(name)(args, context, signal);
+      } catch (error) {
+        if (signal?.aborted && (error === signal.reason || error?.name === 'AbortError' || error?.code === 'ABORT_ERR')) {
+          throw fault(499, '操作已取消');
+        }
+        throw error;
+      }
     },
   };
 }

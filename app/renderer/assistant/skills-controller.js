@@ -13,6 +13,7 @@ export function createSkillsController({
   getWorkspaceId = () => null
 }) {
 const createGroup = createSkillGroups();
+const collisionLabels = { duplicate: '重复', conflict: '冲突', unverified: '同名待核验' };
 let loadSequence = 0, listedWorkspaceId = null;
 async function loadSkills({ preserveSelection = false } = {}) {
   const previous = preserveSelection ? state.selectedSkillId : null;
@@ -58,9 +59,13 @@ function renderSkillsList() {
   for (const [scope, label] of groups) {
     const members = filtered.filter((skill) => skill.scope === scope);
     if (!members.length) continue;
-    const group = createGroup(scope, label, members.length, Boolean(query)); el.skillsList.append(group);
+    const warnings = members.filter(skill => skill.collision).length;
+    const group = createGroup(scope, warnings ? `${label} · ${warnings} 项同名提醒` : label, members.length, Boolean(query) || warnings > 0); el.skillsList.append(group);
     for (const skill of members) {
       const row = document.createElement('div'); row.className = `skill-list-item${skill.id === state.selectedSkillId && !state.skillAdding ? " active" : ""}`;
+      if (skill.collision) row.classList.add('skill-collision-row', `skill-collision-${skill.collision.kind}`);
+      row.dataset.skillId = skill.id;
+      row.title = `${skill.origin || scopeLabel(skill.scope)}：${skill.filePath}`;
       const select = skillButton('', () => {} , 'skill-list-select');
       const line = document.createElement("span"); line.className = "skill-list-name"; line.textContent = skill.name;
       const status = document.createElement("i");
@@ -69,6 +74,11 @@ function renderSkillsList() {
       status.className = update?.state === "update-available" ? "skill-update-dot" : skill.disableModelInvocation ? "skill-off-dot" : "skill-on-dot";
       const desc = document.createElement("small"); desc.textContent = skill.description || "无描述";
       select.append(line, status, desc);
+      if (skill.collision) {
+        const warning = document.createElement('span'); warning.className = 'skill-collision-label';
+        warning.textContent = `${collisionLabels[skill.collision.kind] || '同名'} · ${skill.loadState === 'shadowed' ? '未选用' : '扫描选用'}`;
+        select.append(warning);
+      }
       const actions = document.createElement('span'); actions.className = 'skill-list-actions';
       if (skill.writable || skill.install) {
         const remove = skillIcon(skill.install ? '卸载 Skill' : '删除 Skill', 'trash-2', () => skill.install ? uninstallSkill(skill) : deleteCustomSkill(skill));
@@ -94,7 +104,7 @@ function renderSkillDetail() {
   const titleWrap = document.createElement("div");
   const title = document.createElement("h3"); title.textContent = skill.name;
   const badges = document.createElement("div"); badges.className = "skill-badges";
-  badges.append(skillBadge(skill.scope === "project" ? "项目" : skill.scope === "global" ? "全局" : "只读"));
+  badges.append(skillBadge(skill.origin || (skill.scope === "project" ? "宝蛋项目技能" : skill.scope === "global" ? "全局技能" : "只读")));
   if (skill.install) badges.append(skillBadge("skills.sh", "managed"));
   else if (skill.writable) badges.append(skillBadge("自定义", "custom"));
   titleWrap.append(title, badges);
@@ -112,6 +122,23 @@ function renderSkillDetail() {
   appendSkillField("描述", skill.description || "无", el.skillsDetail);
   appendSkillField("路径", skill.filePath, el.skillsDetail, "code");
   appendSkillField("来源", skill.source || skill.scope, el.skillsDetail);
+  if (skill.collision) {
+    const note = document.createElement('div'); note.className = `skill-collision-note skill-collision-${skill.collision.kind}`;
+    const summary = document.createElement('strong');
+    summary.textContent = skill.collision.kind === 'duplicate' ? '同名重复：技能目录内容一致（含脚本及参考文件）。'
+      : skill.collision.kind === 'conflict' ? '同名冲突：技能目录内容不同，请核对后决定保留哪份。'
+      : '存在同名技能，但内容未能完整核验，不能判断是否一致。';
+    const status = document.createElement('p');
+    status.textContent = skill.loadState === 'shadowed' ? '本份未被扫描选用，同名技能遮蔽了本份。' : '本份被当前配置扫描选用。';
+    note.append(summary, status);
+    for (const peer of skill.collision.peers) {
+      const item = document.createElement('p');
+      item.textContent = `另一份（${scopeLabel(peer.scope)}，${peer.loadState === 'shadowed' ? '未选用' : '扫描选用'}）：${peer.filePath}`;
+      note.append(item);
+    }
+    const help = document.createElement('p'); help.textContent = '可分别选择列表中的技能修改或删除；不会自动处理。以上为当前配置扫描结果，运行中的会话需重载后生效。';
+    note.append(help); el.skillsDetail.append(note);
+  }
   if (skill.install) {
     appendSkillField("版本", shortSkillVersion(skill.install.versionHash), el.skillsDetail, "code");
     if (skill.install.skillsShUrl) {
@@ -284,7 +311,7 @@ async function createCustomSkill() {
 }
 
 async function deleteCustomSkill(skill) {
-  if (!await uiDialogs.confirm("将删除整个 Skill 目录，删除前会自动备份。", { title: `确认删除自定义 Skill「${skill.name}」？`, danger: true, confirmText: "确认删除" })) return;
+  if (!await uiDialogs.confirm(`范围：${scopeLabel(skill.scope)}\n路径：${skill.filePath}\n将删除这一份完整 Skill 目录，删除前会自动备份。`,  { title: `确认删除自定义 Skill「${skill.name}」？`, danger: true, confirmText: "确认删除" })) return;
   await runSkillMutation(() => invoke("skills.deleteCustom", { ...({ name: skill.name, scope: skill.scope }) }), "删除成功");
 }
 
@@ -396,7 +423,7 @@ function skillButton(text, handler, className = "") { const button = document.cr
 
 function skillUpdateKey(install) { return `${install.scope}\0${install.package}`; }
 
-function scopeLabel(scope) { return scope === "global" ? "全局" : "当前项目"; }
+function scopeLabel(scope) { return scope === "global" ? "全局" : scope === "project" ? "宝蛋项目" : "用户项目或其他只读来源"; }
 
 function shortSkillVersion(value) { return value ? String(value).slice(0, 10) : "未知"; }
 

@@ -2,6 +2,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadPiSdk, piPackageRoot } from "./pi-admin.mjs";
+import { prepareWorkspace, workspaceLayoutPrompt } from './workspace-layout.mjs';
+import { createWorkspaceSettings, workspaceResourceOptions, validateWorkspaceSettings } from './workspace-resources.mjs';
+import { applicationDataPrompt } from './app-data-context.mjs';
 
 const SHELL_WRAPPER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/shell-wrappers");
 
@@ -25,7 +28,8 @@ export function prepareSdkEnvironment(agentDir, env = process.env, platform = pr
   }
 }
 
-export async function createSdkHost({ cwd, agentDir, sessionDir, sessionPath, sessionManager, log = console }) {
+export async function createSdkHost({ cwd, agentDir, sessionDir, sessionPath, sessionManager, dataPaths, allowMigration = false, log = console }) {
+  const dataPrompt = applicationDataPrompt(dataPaths);
   prepareSdkEnvironment(agentDir);
   const sdk = await loadPiSdk();
   for (const name of ["createAgentSessionRuntime", "createAgentSessionServices", "createAgentSessionFromServices"]) {
@@ -36,12 +40,23 @@ export async function createSdkHost({ cwd, agentDir, sessionDir, sessionPath, se
   // but no terminal, stdin takeover or theme watcher is started.
   const { theme } = await import(pathToFileURL(path.join(piPackageRoot(), "dist/modes/interactive/theme/theme.js")).href);
   const createRuntime = async ({ cwd: targetCwd, sessionManager: manager, sessionStartEvent }) => {
-    const settingsManager = sdk.SettingsManager.create(targetCwd, agentDir, { projectTrusted: true });
+    const layout = await prepareWorkspace(targetCwd, { sessionId: manager.getSessionId(), allowMigration });
+    const settingsManager = createWorkspaceSettings(sdk, targetCwd, agentDir);
     const services = await sdk.createAgentSessionServices({
       cwd: targetCwd, agentDir, settingsManager,
+      resourceLoaderOptions: {
+        ...workspaceResourceOptions(layout),
+        appendSystemPromptOverride: base => [...base, ...[dataPrompt, workspaceLayoutPrompt(layout)].filter(Boolean)],
+      },
       // Same registered-workspace trust policy as the former CLI --approve.
       resourceLoaderReloadOptions: { resolveProjectTrust: async () => true },
     });
+    const reloadResources = services.resourceLoader.reload.bind(services.resourceLoader);
+    services.resourceLoader.reload = async options => {
+      await prepareWorkspace(targetCwd, { sessionId: manager.getSessionId(), allowMigration });
+      validateWorkspaceSettings(targetCwd);
+      return reloadResources(options);
+    };
     const patterns = settingsManager.getEnabledModels() || [];
     const { scopedModels = [], diagnostics = [] } = patterns.length
       ? await sdk.resolveModelScopeWithDiagnostics(patterns, services.modelRuntime)

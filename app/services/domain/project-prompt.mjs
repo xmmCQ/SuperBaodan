@@ -1,14 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { prepareWorkspace } from './workspace-layout.mjs';
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const LIMIT = 128 * 1024;
 export async function readProjectPrompt(root) {
-  const directory = await fs.realpath(root), file = path.join(directory, 'AGENTS.md');
+  const { projectPromptFile: file } = await prepareWorkspace(root);
   let bytes;
   try {
     const info = await fs.lstat(file);
-    if (info.isSymbolicLink() || !info.isFile()) throw fail('AGENTS.md 必须是项目根目录中的普通文件，不能是链接', 409);
+    if (info.isSymbolicLink() || !info.isFile()) throw fail('BaodanPark/AGENTS.md 必须是普通文件，不能是链接', 409);
     if (info.size > LIMIT) throw fail('项目提示词超过128KB，请使用外部编辑器处理', 413);
     bytes = await fs.readFile(file);
   } catch (e) { if (e.code === 'ENOENT') return { path: file, exists: false, content: '', revision: 'missing' }; throw e; }

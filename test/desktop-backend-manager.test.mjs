@@ -29,8 +29,8 @@ function harness(options = {}) {
       child.runId = args[2].env.SUPER_BAODAN_DESKTOP_RUN_ID;
       children.push(child); spawns.push(args); return child;
     },
-    createLogWriter: silentWriter,
-    startupTimeoutMs: 1_000, stopTimeoutMs: options.stopTimeoutMs || 100, killTimeoutMs: 30,
+    createLogWriter: options.createLogWriter || silentWriter,
+    startupTimeoutMs: options.startupTimeoutMs || 1_000, stopTimeoutMs: options.stopTimeoutMs || 100, killTimeoutMs: 30,
   });
   return { manager, children, spawns };
 }
@@ -113,6 +113,60 @@ test("强制停止失败不会报告成功", async () => {
   assert.equal(await manager.forceStop(), false);
   assert.equal(manager.state, "stopping");
   children[0].exit(1, null); await childListeners();
+});
+
+test('启动超时且两次终止失败，反复重试不创建第二个进程；确认退出后才允许重试', async () => {
+  const { manager, children, spawns } = harness({ startupTimeoutMs: 10, childOptions: { autoExit: false, killResult: false } });
+  await assert.rejects(manager.start(), { code: 'STOP_INCOMPLETE' });
+  const old = manager.currentRun;
+  assert.ok(old);
+  assert.deepEqual(children[0].kills, ['SIGTERM', 'SIGKILL']);
+  for (let i = 0; i < 3; i++) await assert.rejects(manager.start(), { code: 'STOP_INCOMPLETE' });
+  assert.equal(spawns.length, 1);
+  children[0].exit(1, null); await childListeners();
+  const retry = manager.start(); await ready(manager, children, 1); await retry;
+  await manager.handleExit(old, 1, null);
+  assert.equal(manager.currentRun.child, children[1]);
+  children[1].exit(0, null); await childListeners();
+});
+
+test('已收到退出事件但日志清理尚未完成时不创建新实例，退出处理幂等', async () => {
+  let release, closes = 0;
+  const gate = new Promise(resolve => { release = resolve; });
+  const { manager, children } = harness({ createLogWriter: () => ({ push() {}, async close() { closes++; await gate; } }) });
+  const starting = manager.start(); const child = await ready(manager, children); await starting;
+  const run = manager.currentRun;
+  child.exit(1, null);
+  const cleanup = manager.handleExit(run, 1, null);
+  await assert.rejects(manager.start(), { code: 'STOP_INCOMPLETE' });
+  assert.equal(children.length, 1);
+  release(); await cleanup;
+  await manager.handleExit(run, 1, null); assert.equal(closes, 2);
+  const retry = manager.start(); await ready(manager, children, 1); await retry;
+  await manager.handleExit(run, 1, null); assert.equal(manager.state, 'running');
+  await manager.stop();
+});
+
+for (const failure of ['prepare', 'spawn', 'spawn-event']) test(`${failure}失败没有存活子进程：关闭日志后可重试`, async () => {
+  let first = true, closed = 0;
+  const h = harness({ createLogWriter: () => ({ push() {}, async close() { closed++; } }) });
+  if (failure === 'prepare') h.manager.prepare = async () => { if (first) { first = false; throw new Error('prepare failed'); } };
+  else {
+    const spawn = h.manager.spawnProcess;
+    h.manager.spawnProcess = (...args) => {
+      if (!first) return spawn(...args);
+      first = false;
+      if (failure === 'spawn') throw new Error('spawn failed');
+      const child = new FakeChild({ autoExit: false });
+      queueMicrotask(() => child.emit('error', new Error('spawn failed')));
+      return child;
+    };
+  }
+  await assert.rejects(h.manager.start(), /failed/);
+  assert.equal(closed, 2);
+  assert.equal(h.manager.currentRun, null);
+  const retry = h.manager.start(); await ready(h.manager, h.children); await retry;
+  await h.manager.stop();
 });
 
 function childListeners() { return new Promise((resolve) => setTimeout(resolve, 5)); }

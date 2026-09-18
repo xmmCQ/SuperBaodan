@@ -5,8 +5,8 @@ import path from 'node:path';
 import { statusError } from './pi-admin.mjs';
 
 const inside = (file, root) => { const rel = path.relative(root, file); return !rel || (!rel.startsWith('..') && !path.isAbsolute(rel)); };
-export async function skillTreeDigest(root) {
-  const entries = []; let count = 0;
+export async function skillTreeDigest(root, { maxBytes = Infinity } = {}) {
+  const entries = []; let count = 0, bytes = 0;
   async function walk(directory) {
     const stat = await lstat(directory);
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw statusError(403, '不能转换包含链接或异常目录的 Skill');
@@ -16,6 +16,8 @@ export async function skillTreeDigest(root) {
       if (stat.isSymbolicLink()) throw statusError(403, '不能转换包含符号链接的 Skill');
       if (stat.isDirectory()) { entries.push(['dir', relative]); await walk(file); }
       else if (stat.isFile()) {
+        bytes += stat.size;
+        if (bytes > maxBytes) throw statusError(413, 'Skill 文件过大，未完成内容核验');
         const hash = createHash('sha256');
         for await (const chunk of createReadStream(file)) hash.update(chunk);
         entries.push(['file', relative, stat.size, hash.digest('hex')]);

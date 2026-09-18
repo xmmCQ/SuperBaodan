@@ -11,6 +11,7 @@ export function deferred() {
 }
 export async function sdkHarness(options = {}) {
   const temp = await createTempProject("super-baodan-sdk-");
+  await temp.ensureDir('workspace');
   const hosts = [], events = [], order = [];
   let nextId = 1;
   const createHost = async (args) => {

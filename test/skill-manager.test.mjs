@@ -1,3 +1,4 @@
+import { prepareWorkspace } from '../app/services/domain/workspace-layout.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -84,7 +85,7 @@ test("自定义Skill可创建、编辑、备份并删除", async (t) => {
     loadSdk: async () => ({ parseFrontmatter: (content) => ({ frontmatter: parseSkillMarkdown(content) }) }),
   });
   await manager.createCustom({ scope: "project", name: "demo", mode: "structured", description: "演示技能", body: "# 初始" });
-  const file = path.join(cwd, ".pi", "skills", "demo", "SKILL.md");
+  const file = path.join(cwd, "BaodanPark", ".pi", "skills", "demo", "SKILL.md");
   assert.equal(existsSync(file), true);
   await manager.updateCustom({ scope: "project", name: "demo", mode: "structured", description: "已修改", body: "# 更新" });
   assert.equal(parseSkillMarkdown(await readFile(file, "utf8")).description, "已修改");
@@ -98,7 +99,8 @@ test("skills.sh安装失败时恢复Skill目录快照", async (t) => {
   const root = await tempRoot(t, "super-baodan-skill-rollback-");
   const agentDir = path.join(root, "agent");
   const cwd = path.join(root, "workspace");
-  const projectRoot = path.join(cwd, ".pi", "skills");
+  await mkdir(cwd, { recursive: true }); await prepareWorkspace(cwd);
+  const projectRoot = path.join(cwd, "BaodanPark", ".pi", "skills");
   const keepFile = path.join(projectRoot, "keep", "SKILL.md");
   await mkdir(path.dirname(keepFile), { recursive: true });
   await writeFile(keepFile, buildSkillMarkdown({ name: "keep", description: "原始", body: "# 原始" }));
@@ -140,7 +142,8 @@ test("自定义Skill拒绝符号链接逃逸", async (t) => {
   const root = await tempRoot(t, "super-baodan-skill-link-");
   const agentDir = path.join(root, "agent");
   const cwd = path.join(root, "workspace");
-  const projectRoot = path.join(cwd, ".pi", "skills");
+  await mkdir(cwd, { recursive: true }); await prepareWorkspace(cwd);
+  const projectRoot = path.join(cwd, "BaodanPark", ".pi", "skills");
   const outside = path.join(root, "outside");
   await Promise.all([mkdir(agentDir, { recursive: true }), mkdir(projectRoot, { recursive: true }), mkdir(outside, { recursive: true })]);
   await writeFile(path.join(outside, "SKILL.md"), buildSkillMarkdown({ name: "escape", description: "外部", body: "# 外部" }));

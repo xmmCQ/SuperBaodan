@@ -13,7 +13,7 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Actual Electron regression: a renderer beforeunload veto must not strand a
 // window after the explicit exit flow has already stopped its service and tray.
-test('Windows桌面：未保存文档草稿不能阻止应用静默退出', { timeout: 30000 }, async t => {
+test('Windows桌面：未保存文档草稿不能阻止应用静默退出', { timeout: 45000 }, async t => {
   if (process.platform !== 'win32' || !existsSync(electron)) return t.skip('需要Windows Electron');
   const temp = await createTempProject('sb-draft-exit-');
   const probe = net.createServer(); const port = await listenOnSafePort(probe);
@@ -57,7 +57,9 @@ test('Windows桌面：未保存文档草稿不能阻止应用静默退出', { ti
   const preparation = await Promise.race([prepared, wait(7000).then(() => null)]);
   assert.equal(preparation?.result?.result?.value, true, JSON.stringify(preparation));
   socket.send(JSON.stringify({ id: 2, method: 'Runtime.evaluate', params: { expression: 'window.workbench.requestExit()' } }));
-  const result = await Promise.race([exited, wait(7000).then(() => null)]);
+  // 退出协议允许正常清理10秒，再对自有进程进行有界强制结束。
+  // 7秒早于协议上限，会把合法的SDK清理误判为草稿拦截。
+  const result = await Promise.race([exited, wait(18000).then(() => null)]);
   assert.deepEqual(result, { code: 0 }, '应用必须完成退出，不能被草稿卸载保护卡住');
   assert.equal(existsSync(path.join(temp.root, 'SuperBaodan/desktop-dev/runtime/work-documents.json')), false, '退出不得自动保存草稿');
 });

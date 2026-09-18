@@ -7,13 +7,13 @@ import { sdkHarness, deferred, wait } from './helpers/fake-sdk-host.mjs';
 import { createSmokeServer } from './helpers/smoke-server.mjs';
 import { launchBrowser, edgeAvailable } from './helpers/browser-harness.mjs';
 
-test('项目根目录提示词创建、版本冲突、备份、空内容及编码大小校验', async t => {
+test('BaodanPark 提示词创建、版本冲突、备份、空内容及编码大小校验', async t => {
   const temp = await createTempProject('project-prompt-'); t.after(() => temp.cleanup());
   await temp.ensureDir('project'); await temp.ensureDir('other');
   const root = temp.resolve('project'), backups = temp.resolve('backups');
-  const missing = await readProjectPrompt(root); assert.equal(missing.exists, false);
+  const missing = await readProjectPrompt(root); assert.equal(missing.exists, true);
   const first = await saveProjectPrompt(root, { content: '# 项目规则\n使用中文', revision: missing.revision }, backups);
-  assert.equal(first.exists, true); assert.equal((await readProjectPrompt(temp.resolve('other'))).exists, false);
+  assert.equal(first.exists, true); assert.equal((await readProjectPrompt(temp.resolve('other'))).exists, true);
   await assert.rejects(saveProjectPrompt(root, { content: '旧页面', revision: missing.revision }, backups), { statusCode: 409 });
   const empty = await saveProjectPrompt(root, { content: '', revision: first.revision }, backups); assert.equal(empty.content, '');
   const files = await fs.readdir(backups); assert.equal(await fs.readFile(`${backups}/${files[0]}`, 'utf8'), first.content);
@@ -49,7 +49,7 @@ test('设置项目提示词：新建保存、未保存确认、运行中拒绝�
   await browser.navigate(`http://127.0.0.1:${fixture.port}/assistant.html`);
   await browser.waitFor("document.querySelector('#workspaceSwitcher').textContent.includes('测试工作区')");
   await browser.evaluate("settingsButton.click();document.querySelector('[data-settings-tab=projectPrompt]').click()");
-  await browser.waitFor("document.querySelector('.project-prompt-status').textContent.includes('尚未创建')");
+  await browser.waitFor("document.querySelector('.project-prompt-editor').value.includes('工作区指令')");
   await browser.evaluate("document.querySelector('.project-prompt-editor').value='项目规则：中文回答';document.querySelector('.project-prompt-save').click()");
   await browser.waitFor("document.querySelector('.project-prompt-status').textContent.includes('已保存并生效')");
   assert.equal((await readProjectPrompt(fixture.state.projectRoot)).content, '项目规则：中文回答');

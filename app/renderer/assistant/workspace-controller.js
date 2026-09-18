@@ -51,7 +51,10 @@ async function loadWorkspaceTree() {
   setIconBusy(el.refreshWorkspace, true);
   try {
     const data = await invoke("files.tree", { depth: "4", workspaceId: state.workspace?.id }, { signal: controller.signal });
-    if (!controller.signal.aborted && scope === scopeKey()) el.workspaceTree.replaceChildren(renderTreeEntries(data.entries || [], true));
+    if (!controller.signal.aborted && scope === scopeKey()) {
+      el.workspaceTree.replaceChildren(renderTreeEntries(data.entries || [], true));
+      if (data.truncated) showNotice('目录条目达到上限，仅显示部分内容，请展开具体子目录查看。');
+    }
   } catch (error) {
     if (!controller.signal.aborted && scope === scopeKey()) el.workspaceTree.textContent = error.message;
   } finally {
@@ -130,12 +133,29 @@ function renderTreeEntries(entries, root = false) {
     label.dataset.tooltip = entry.path;
     if (entry.kind === "directory") {
       const children = renderTreeEntries(entry.children || []);
-      label.textContent = `▾ ${entry.name}`;
-      label.setAttribute("aria-expanded", "true");
-      label.addEventListener("click", () => {
+      const name = `${entry.name}${entry.processDirectory ? '（过程目录）' : ''}`;
+      let loaded = Array.isArray(entry.children);
+      const scope = scopeKey();
+      children.classList.toggle('hidden', !loaded);
+      label.textContent = `${loaded ? '▾' : '▸'} ${name}`;
+      label.setAttribute("aria-expanded", String(loaded));
+      const current = () => scope === scopeKey() && item.isConnected && el.workspaceTree.contains(item);
+      label.addEventListener("click", async () => {
+        if (!current()) return;
+        if (!loaded) {
+          label.disabled = true;
+          try {
+            const data = await invoke('files.tree', { path: entry.path, depth: 3, workspaceId: state.workspace?.id });
+            if (!current()) return;
+            children.replaceChildren(...renderTreeEntries(data.entries || []).children);
+            loaded = true;
+            if (data.truncated) showNotice('目录条目达到上限，仅显示部分内容，请展开具体子目录查看。');
+          } catch (error) { if (current()) showError(error); return; }
+          finally { label.disabled = false; }
+        }
         const expanded = label.getAttribute("aria-expanded") === "true";
         label.setAttribute("aria-expanded", String(!expanded));
-        label.textContent = `${expanded ? "▸" : "▾"} ${entry.name}`;
+        label.textContent = `${expanded ? "▸" : "▾"} ${name}`;
         children.classList.toggle("hidden", expanded);
       });
       item.append(label, children);

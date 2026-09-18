@@ -1,3 +1,4 @@
+import { prepareWorkspace } from '../app/services/domain/workspace-layout.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -11,11 +12,12 @@ import { createServerApplication } from './helpers/command-http-fixture.mjs';
 async function fixture(t) {
   const temp = await createTempProject('skill-transfer-'); t.after(temp.cleanup);
   const agentDir = path.join(temp.root, 'agent'), cwd = path.join(temp.root, 'project');
-  const roots = [path.join(agentDir, 'skills'), path.join(cwd, '.pi', 'skills')];
+  await mkdir(cwd, { recursive: true }); await prepareWorkspace(cwd);
+  const roots = [path.join(agentDir, 'skills'), path.join(cwd, 'BaodanPark', '.pi', 'skills')];
   for (const root of roots) await mkdir(root, { recursive: true });
   const manager = new SkillManager({ agentDir, cwd, backupDir: path.join(temp.root, 'backups'), env: { USERPROFILE: temp.root },
     piAdmin: { withMaintenance: operation => operation() }, execFileImpl: async () => ({ stdout: '1' }),
-    loadSdk: async () => ({ DefaultResourceLoader: class {
+    loadSdk: async () => ({ SettingsManager: { fromStorage: () => ({}) }, DefaultResourceLoader: class {
       async reload() { this.skills = []; for (const root of roots) for (const name of await readdir(root)) {
         const filePath = path.join(root, name, 'SKILL.md');
         const parsed = parseSkillMarkdown(await readFile(filePath, 'utf8'));

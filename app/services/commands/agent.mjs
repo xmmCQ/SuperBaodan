@@ -1,3 +1,4 @@
+import { captureWorkspace, assertWorkspaceSnapshot, withWorkspaceSnapshot } from '../workspace-operations.mjs';
 import { fault } from "../../shared/errors.js";
 import { MAX_UI_RESPONSE_BYTES } from '../ui-event-payloads.mjs';
 import { assertAllowedAgentCommand } from "../domain/agent-commands.mjs";
@@ -16,38 +17,45 @@ export function registerAgentCommands(commands) {
     return context.promptReceipts.get(args.requestId);
   });
 
-  commands.set("agent.snapshot", async (args, context) => {
-    context.assertActiveWorkspace(args.workspaceId);
-    if (context.piAdmin.maintenanceActive) throw fault(409, "配置维护中，请稍后重试");
-    const messages = args.messages === "1";
-    if (messages && !context.piRuntime.running) await context.ensureActiveStarted();
-    return { ...context.piRuntime.snapshot({ messages, since: args.since }), turnFiles: context.turnFileSnapshot() };
+  commands.set('agent.snapshot', async (args, context, signal) => {
+    const snapshot = captureWorkspace(context, args.workspaceId);
+    if (snapshot.admin.maintenanceActive) throw fault(409, '配置维护中，请稍后重试');
+    const messages = args.messages === '1';
+    const read = () => ({ ...snapshot.runtime.snapshot({ messages, since: args.since }), turnFiles: context.turnFileSnapshot() });
+    if (!messages || snapshot.runtime.running) return read();
+    return withWorkspaceSnapshot(context, snapshot, args.workspaceId, async () => {
+      await context.ensureActiveStarted(snapshot);
+      assertWorkspaceSnapshot(context, snapshot);
+      return read();
+    }, { signal, maintenance: true });
   });
 
-  commands.set("agent.bootstrap", async (args, context) => {
-    context.assertActiveWorkspace(args.workspaceId);
-    await context.ensureActiveStarted();
-    const [state, messages, models, thinking, sessions, preferences, workspaces] = await Promise.all([
-      context.piRuntime.send({ type: "get_state" }),
-      context.piRuntime.send({ type: "get_messages" }),
-      context.safeAgentCommand({ type: "get_available_models" }, { models: [] }),
-      context.safeAgentCommand({ type: "get_available_thinking_levels" }, { levels: ["off"] }),
-      context.listActiveSessions(),
-      context.piAdmin.preferences(),
-      context.publicWorkspaceList(),
-    ]);
-    await context.rememberSessionFromState(state);
-    return {
-      state,
-      messages: messages?.messages || [],
-      models: models?.models || [],
-      enabledModels: preferences.enabledModels,
-      thinkingLevels: thinking?.levels || ["off"],
-      sessions,
-      workspace: context.publicWorkspace(context.activeWorkspace),
-      workspaces,
-      turnFiles: context.turnFileSnapshot(),
-    };
+  commands.set('agent.bootstrap', async (args, context, signal) => {
+    const snapshot = captureWorkspace(context, args.workspaceId);
+    return withWorkspaceSnapshot(context, snapshot, args.workspaceId, async ({ runtime, workspace, admin }) => {
+      await context.ensureActiveStarted(snapshot);
+      const [state, messages, models, thinking, sessions, preferences, workspaces] = await Promise.all([
+        runtime.send({ type: 'get_state' }),
+        runtime.send({ type: 'get_messages' }),
+        context.safeAgentCommand({ type: 'get_available_models' }, { models: [] }, runtime),
+        context.safeAgentCommand({ type: 'get_available_thinking_levels' }, { levels: ['off'] }, runtime),
+        context.listActiveSessions(runtime, workspace),
+        admin.preferences(),
+        context.publicWorkspaceList(),
+      ]);
+      await context.rememberSessionFromState(state, snapshot);
+      return {
+        state,
+        messages: messages?.messages || [],
+        models: models?.models || [],
+        enabledModels: preferences.enabledModels,
+        thinkingLevels: thinking?.levels || ['off'],
+        sessions,
+        workspace: context.publicWorkspace(workspace),
+        workspaces,
+        turnFiles: context.turnFileSnapshot(),
+      };
+    }, { signal, maintenance: true });
   });
 
   commands.set("agent.command", async (args, context) => {
@@ -69,12 +77,13 @@ export function registerAgentCommands(commands) {
     return { ok: true, data: body.type === "get_messages" ? { ...result, turnFiles: context.turnFileSnapshot() } : result };
   });
 
-  commands.set("agent.new", async (args, context) => {
-    const body = args;
-    context.assertActiveWorkspace(body.workspaceId);
-    context.clearTurnFiles();
-    const state = await context.piRuntime.newSession();
-    await context.rememberSessionFromState(state);
-    return { ok: true, state };
+  commands.set('agent.new', async (args, context, signal) => {
+    const snapshot = captureWorkspace(context, args.workspaceId);
+    return withWorkspaceSnapshot(context, snapshot, args.workspaceId, async ({ runtime }) => {
+      const state = await runtime.newSession();
+      await context.rememberSessionFromState(state, snapshot);
+      context.clearTurnFiles();
+      return { ok: true, state };
+    }, { signal, maintenance: true });
   });
 }

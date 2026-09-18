@@ -24,7 +24,7 @@ async function fixture(t) {
     const id = String(++sequence); const result = message(child, m => m.type === 'result' && m.id === id);
     child.send({ type: 'invoke', runId, id, name, args }); return result;
   };
-  return { child, invoke, runId, exited };
+  return { child, invoke, runId, exited, root };
 }
 function message(child, predicate) {
   return new Promise((resolve, reject) => {
@@ -49,6 +49,25 @@ test('独立业务进程通过IPC就绪、命令调用及正常退出', { timeou
   assert.equal((await invoke('system.status')).value.ok, true);
   child.send({ type: 'shutdown', runId });
   assert.equal(await exited, 0);
+});
+
+test('IPC取消到达服务端并停止会话搜索，后续普通搜索和写入仍成功', { timeout: 20000 }, async t => {
+  const { child, invoke, runId, root } = await fixture(t);
+  const list = (await invoke('workspaces.list')).value;
+  const workspace = list.items.find(w => w.id === list.activeWorkspaceId);
+  await mkdir(path.join(root, 'sessions'), { recursive: true });
+  const header = JSON.stringify({ type: 'session', id: 'search-fixture', cwd: workspace.root });
+  const row = JSON.stringify({ type: 'message', message: { role: 'user', content: 'temporary scan data '.repeat(2000) } });
+  await writeFile(path.join(root, 'sessions', 'search.jsonl'), header + '\n' + (row + '\n').repeat(400));
+  for (let i = 0; i < 3; i++) {
+    const id = `cancel-search-${i}`;
+    const result = message(child, m => m.type === 'result' && m.id === id);
+    child.send({ type: 'invoke', runId, id, name: 'sessions.search', args: { workspaceId: workspace.id, q: 'absent' } });
+    child.send({ type: 'cancel', runId, id });
+    assert.equal((await result).error?.code, 499);
+  }
+  assert.equal((await invoke('sessions.search', { workspaceId: workspace.id, q: 'temporary' })).error, undefined);
+  assert.equal((await invoke('files.upload', { workspaceId: workspace.id, name: 'after-cancel.txt', content: Buffer.from('ok') })).error, undefined);
 });
 
 test('父进程IPC断开时业务进程自动退出', { timeout: 20000 }, async t => {

@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
+import { prepareWorkspace } from './domain/workspace-layout.mjs';
+import { validateWorkspaceSettings } from './domain/workspace-resources.mjs';
 import { WorkApps } from './domain/work-apps.mjs';
 import { saveProjectPrompt } from './domain/project-prompt.mjs';
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { buildDashboard, buildDayDetails, localDateString, parseWorkTodo } from "./domain/tasks.mjs";
@@ -18,7 +20,7 @@ import { publicErrorMessage } from "../shared/errors.js";
 import { PromptReceipts } from "./prompt-receipts.mjs";
 import { UiEventPayloads } from './ui-event-payloads.mjs';
 import { boundBrowserAgentEvent, MAX_BROWSER_EVENT_BYTES } from './domain/pi-sdk-ui.mjs';
-import { enqueueWorkspaceOperation } from './workspace-operations.mjs';
+import { enqueueWorkspaceOperation, assertWorkspaceSnapshot } from './workspace-operations.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -59,19 +61,22 @@ class RuntimeContext {
   async initialize() {
     await Promise.all([
       mkdir(this.config.backupDir, { recursive: true }),
-      mkdir(this.config.workspaceDir, { recursive: true }),
       this.vskillManager.initialize(),
       this.dailyRecordManager.initialize(),
       this.workspaceRegistry.initialize(),
     ]);
-    await this.migrateCoreSkill();
     this.activeWorkspace = this.workspaceRegistry.active();
     Object.assign(this, await this.createRuntimeServices(this.activeWorkspace.canonicalRoot));
   }
 
 
   async createRuntimeServices(cwd) {
-    const runtime = new PiSdkRuntime({ cwd, sessionDir: this.config.piSessionDir, agentDir: this.config.piAgentDir, log: console });
+    const workspaceLayout = await prepareWorkspace(cwd);
+    validateWorkspaceSettings(workspaceLayout.workspaceRoot);
+    const runtime = new PiSdkRuntime({
+      cwd, sessionDir: this.config.piSessionDir, agentDir: this.config.piAgentDir, log: console,
+      dataPaths: { todoFile: this.config.todoFile, dailyRecordFile: this.config.dailyRecordFile },
+    });
     const admin = new PiAdmin({ agentDir: this.config.piAgentDir, cwd, piRuntime: runtime, log: console });
     const skills = new SkillManager({ agentDir: this.config.piAgentDir, cwd, backupDir: this.config.backupDir, piAdmin: admin, log: console });
     const files = await new WorkspaceService(cwd).initialize();
@@ -79,27 +84,17 @@ class RuntimeContext {
       if (runtime === this.piRuntime) this.broadcastAgentEvent(event);
       else if (runtime === this.switchCandidateRuntime && event.type === "extension_ui_request") this.emitAgentEvent(event);
     });
-    return { piRuntime: runtime, piAdmin: admin, skillManager: skills, workspaceService: files };
+    return { piRuntime: runtime, piAdmin: admin, skillManager: skills, workspaceService: files, workspaceLayout };
   }
 
-  async migrateCoreSkill() {
-    const source = path.join(this.config.workspaceDir, ".pi", "skills", "ultimate-workhorse");
-    const target = path.join(this.config.piAgentDir, "skills", "ultimate-workhorse");
-    if (!existsSync(source) || existsSync(target)) return;
-    try {
-      await mkdir(path.dirname(target), { recursive: true });
-      await cp(source, target, { recursive: true, errorOnExist: true });
-      console.log(`核心Skill已共享到全局目录：${target}`);
-    } catch (error) {
-      console.warn(`共享核心Skill失败，将继续使用项目副本：${error.message}`);
-    }
-  }
-
-  async ensureActiveStarted() {
-    if (this.piRuntime.running || this.piRuntime.activeSessionPath) return this.piRuntime.ensureStarted();
-    const sessions = await this.listActiveSessions();
-    const remembered = sessions.find((session) => session.id === this.activeWorkspace.lastSessionId);
-    return remembered ? this.piRuntime.openSession(remembered.path) : this.piRuntime.ensureStarted();
+  async ensureActiveStarted(snapshot) {
+    assertWorkspaceSnapshot(this, snapshot);
+    const { runtime, workspace } = snapshot;
+    if (runtime.running || runtime.activeSessionPath) return runtime.ensureStarted();
+    const sessions = await this.listActiveSessions(runtime, workspace);
+    assertWorkspaceSnapshot(this, snapshot);
+    const remembered = sessions.find((session) => session.id === workspace.lastSessionId);
+    return remembered ? runtime.openSession(remembered.path) : runtime.ensureStarted();
   }
 
   async listActiveSessions(runtime = this.piRuntime, workspace = this.activeWorkspace) {
@@ -125,9 +120,10 @@ class RuntimeContext {
     return { activeWorkspaceId: listed.activeWorkspaceId, items: listed.items.map((item) => this.publicWorkspace(item)), warning: this.workspaceRegistry.fallbackWarning };
   }
 
-  async rememberSessionFromState(state) {
+  async rememberSessionFromState(state, snapshot) {
+    assertWorkspaceSnapshot(this, snapshot);
     if (!state?.sessionId) return;
-    await this.workspaceRegistry.rememberSession(this.activeWorkspace.id, state.sessionId);
+    await this.workspaceRegistry.rememberSession(snapshot.workspace.id, state.sessionId);
     this.activeWorkspace = this.workspaceRegistry.active();
   }
 
@@ -146,9 +142,10 @@ class RuntimeContext {
 
   activateWorkspace(id) {
     const operation = async () => {
+      const target = await this.workspaceRegistry.validateRegistered(id);
+      validateWorkspaceSettings(target.canonicalRoot);
       if (id === this.activeWorkspace.id) return { workspace: this.publicWorkspace(this.activeWorkspace), sessions: await this.listActiveSessions() };
       if (this.piRuntime.state === "busy" || this.piRuntime.busyReasons.size || this.piRuntime.pending.size || this.piAdmin.maintenanceActive) throw mutationError(409, "任务完成后再切换工作区");
-      const target = await this.workspaceRegistry.validateRegistered(id);
       const previousWorkspace = this.activeWorkspace;
       const previousSessionPath = this.piRuntime.activeSessionPath;
       const previous = { piRuntime: this.piRuntime, piAdmin: this.piAdmin };
@@ -204,8 +201,8 @@ class RuntimeContext {
     return enqueueWorkspaceOperation(this, operation);
   }
 
-  async safeAgentCommand(command, fallback) {
-    try { return await this.piRuntime.send(command); }
+  async safeAgentCommand(command, fallback, runtime = this.piRuntime) {
+    try { return await runtime.send(command); }
     catch (error) { console.warn(`${command.type} 获取失败：`, error.message); return fallback; }
   }
 
@@ -271,7 +268,7 @@ class RuntimeContext {
     this.toolCalls.set(id, call);
     const relative = await call.workspace.normalizeToolPath(rawPath).catch(() => null);
     if (call.epoch !== this.turnFileEpoch || call.workspace !== this.workspaceService || this.toolCalls.get(id) !== call) return;
-    if (!relative) { this.toolCalls.delete(id); return; }
+    if (!relative || /^BaodanPark(?:[\\/]|$)/i.test(relative)) { this.toolCalls.delete(id); return; }
     call.relative = relative;
     this.turnFiles.involved.add(relative);
     this.confirmWorkspaceTool(id, call);

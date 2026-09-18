@@ -3,6 +3,9 @@ import { copyFile, mkdir, readFile, readdir, realpath, rename, stat, unlink, wri
 import os from "node:os";
 import path from "node:path";
 
+import { prepareWorkspace } from './workspace-layout.mjs';
+import { validateWorkspaceSettings } from './workspace-resources.mjs';
+
 const VERSION = 1;
 const NAME_MAX = 60;
 
@@ -20,20 +23,20 @@ export class WorkspaceRegistry {
   }
 
   async initialize() {
-    await Promise.all([mkdir(path.dirname(this.filePath), { recursive: true }), mkdir(this.backupDir, { recursive: true }), mkdir(this.defaultRoot, { recursive: true })]);
-    const canonicalDefault = await realpath(this.defaultRoot);
+    await Promise.all([mkdir(path.dirname(this.filePath), { recursive: true }), mkdir(this.backupDir, { recursive: true })]);
     let loaded = null;
     let original = null;
     try { original = await readFile(this.filePath, "utf8"); loaded = JSON.parse(original); }
-    catch (error) { if (error.code !== "ENOENT") this.log.warn(`工作区配置读取失败，将恢复默认配置：${error.message}`); }
+    catch (error) { if (error.code !== "ENOENT") throw registryError(409, `工作区配置读取失败，未自动切换：${error.message}`); }
+    if (original != null && !isRegistryData(loaded)) throw registryError(409, '工作区配置无效，未自动重置或切换');
+    if (original == null) await mkdir(this.defaultRoot, { recursive: true });
+    const canonicalDefault = await realpath(this.defaultRoot).catch(() => { throw registryError(409, '默认工作区不存在，未自动重建'); });
     if (!isRegistryData(loaded)) {
-      if (original != null) {
-        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-        await writeFile(path.join(this.backupDir, `workspaces-invalid-${stamp}.json`), original, "utf8");
-      }
       const now = new Date().toISOString();
       const item = { id: crypto.randomUUID(), name: "默认工作区", root: canonicalDefault, canonicalRoot: canonicalDefault, isDefault: true, lastSessionId: null, createdAt: now, updatedAt: now, lastUsedAt: now };
       loaded = { version: VERSION, activeWorkspaceId: item.id, items: [item] };
+      await prepareWorkspace(canonicalDefault);
+      validateWorkspaceSettings(canonicalDefault);
       this.data = loaded;
       await this.persist(false);
       return this;
@@ -47,9 +50,10 @@ export class WorkspaceRegistry {
     }
     const configuredActive = this.data.items.find((item) => item.id === this.data.activeWorkspaceId);
     if (!configuredActive || !await directoryAvailable(configuredActive.canonicalRoot)) {
-      if (this.data.activeWorkspaceId !== defaultItem.id) this.fallbackWarning = "上次使用的工作区不可用，已切换到默认工作区";
-      this.data.activeWorkspaceId = defaultItem.id;
+      throw registryError(409, '上次使用的工作区不可用，未自动切换到其他工作区');
     }
+    await prepareWorkspace(configuredActive.canonicalRoot);
+    validateWorkspaceSettings(configuredActive.canonicalRoot);
     await this.persist(false);
     return this;
   }
@@ -77,6 +81,8 @@ export class WorkspaceRegistry {
       if (this.data.items.some((item) => item.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase())) throw registryError(409, "工作区名称已存在");
       const now = new Date().toISOString();
       const item = { id: crypto.randomUUID(), name: cleanName, root: canonicalRoot, canonicalRoot, isDefault: false, lastSessionId: null, createdAt: now, updatedAt: now, lastUsedAt: now };
+      await prepareWorkspace(canonicalRoot);
+      validateWorkspaceSettings(canonicalRoot);
       this.data.items.push(item);
       return { ...item, available: true };
     });
@@ -109,6 +115,8 @@ export class WorkspaceRegistry {
     const item = this.get(id);
     const canonical = await this.validateRoot(item.canonicalRoot);
     if (!samePath(canonical, item.canonicalRoot, this.platform)) throw registryError(409, "工作区真实路径已变化，请移除后重新添加");
+    await prepareWorkspace(canonical);
+    validateWorkspaceSettings(canonical);
     return item;
   }
 

@@ -15,6 +15,56 @@ async function browserFixture(t, size) {
   return { fixture, browser };
 }
 
+test('目录树按需加载深层目录，空目录不重复读取、失败可重试、旧响应不填入页面', { timeout: 25000 }, async t => {
+  if (!edgeAvailable()) return t.skip('未安装Microsoft Edge');
+  const { fixture, browser } = await browserFixture(t, { width: 1400, height: 1000 });
+  await browser.navigate(`http://127.0.0.1:${fixture.port}/assistant.html`);
+  await browser.waitFor("modelPickerButton.textContent.includes('GPT Test')");
+  const result = await browser.evaluate(`(async () => {
+    const {createWorkspaceController}=await import('/assistant/workspace-controller.js');
+    const state={workspace:{id:'A',name:'A'},turnFiles:{involved:[],modified:[]}};
+    const calls=[], errors=[], notices=[], pending=new Map(); let attempt=0;
+    const dir=(path,children)=>({name:path.split('/').pop(),path,kind:'directory',...(children===undefined?{}:{children})});
+    const file=path=>({name:path.split('/').pop(),path,kind:'file'});
+    const roots=[dir('a',[dir('a/b',[dir('a/b/c',[dir('a/b/c/d')])])]),dir('empty',[]),dir('retry'),dir('slow'),dir('detached'),{...dir('BaodanPark'),processDirectory:true}];
+    const elements=new Proxy({}, {get:(_,key)=>document.getElementById(key)});
+    const controller=createWorkspaceController({state,elements,scopedResource:x=>x,workspacePayload:x=>x,setIconBusy(){},uiDialogs:{},createMarkdownArticle:()=>document.createElement('div'),showNotice:text=>notices.push(text),showError:e=>errors.push(e.message),resizePrompt(){},loadBootstrap:async()=>{},
+      invoke:async(name,args)=>{
+        calls.push(args.path||'root');
+        if(!args.path)return {entries:roots,truncated:true};
+        if(args.path==='slow'||args.path==='detached')return new Promise(resolve=>pending.set(args.path,resolve));
+        if(args.path==='retry'&&++attempt===1)throw new Error('retryable');
+        if(args.path==='a/b/c/d')return {entries:[dir('a/b/c/d/e',[dir('a/b/c/d/e/f')])]};
+        if(args.path==='a/b/c/d/e/f')return {entries:[file('a/b/c/d/e/f/deep.txt')]};
+        return {entries:[file(args.path+'/loaded.txt')],truncated:args.path==='BaodanPark'};
+      }});
+    const find=p=>[...workspaceTree.querySelectorAll('button')].find(b=>b.dataset.tooltip===p);
+    const click=async p=>{const b=find(p);if(!b)return false;b.click();for(let i=0;i<100&&b.disabled;i++)await new Promise(r=>setTimeout(r,1));return true;};
+    await controller.loadWorkspaceTree();
+    await click('a/b/c/d');await click('a/b/c/d/e/f');
+    const deepFile=!!find('a/b/c/d/e/f/deep.txt');
+    await click('empty');await click('empty');
+    await click('retry');await click('retry');
+    const retryRecovered=!!find('retry/loaded.txt');
+    await click('BaodanPark');
+    const parkLoaded=!!find('BaodanPark/loaded.txt');
+    const old=find('slow');old.click();await Promise.resolve();
+    controller.setWorkspace({id:'B',name:'B'});workspaceTree.textContent='new workspace';
+    pending.get('slow')?.({entries:[file('STALE.txt')]});await new Promise(r=>setTimeout(r,0));
+    const noStale=workspaceTree.textContent==='new workspace';
+    await controller.loadWorkspaceTree();
+    const detached=find('detached'), oldItem=detached.parentElement;detached.click();await Promise.resolve();
+    await controller.loadWorkspaceTree();
+    pending.get('detached')?.({entries:[file('DETACHED.txt')]});await new Promise(r=>setTimeout(r,0));
+    return {deepFile,retryRecovered,parkLoaded,noStale,detachedUntouched:!oldItem.textContent.includes('DETACHED'),emptyReads:calls.filter(p=>p==='empty').length,retries:calls.filter(p=>p==='retry').length,errors,limitNotices:notices.filter(s=>/上限|部分|截断/.test(s)).length};
+  })()`);
+  assert.equal(result.deepFile, true); assert.equal(result.retryRecovered, true); assert.equal(result.parkLoaded, true);
+  assert.equal(result.noStale, true); assert.equal(result.detachedUntouched, true);
+  assert.equal(result.emptyReads, 0); assert.equal(result.retries, 2); assert.deepEqual(result.errors, ['retryable']);
+  assert.ok(result.limitNotices >= 2);
+  assert.deepEqual(browser.issues, []);
+});
+
 test("阅读偏好校验、动态宽度边界及文件标签身份", () => {
   assert.deepEqual(normalizeReading(null), { size: "standard", width: "standard" });
   assert.deepEqual(normalizeReading({ size: "large", width: "wide" }), { size: "large", width: "wide" });

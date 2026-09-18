@@ -4,7 +4,7 @@ export function captureWorkspace(context, requestedId) {
   context.assertActiveWorkspace(requestedId);
   if (!context.activeWorkspace || context.workspaceSwitching) throw mutationError(409, '工作区正在切换，请重试');
   return {
-    workspace: { ...context.activeWorkspace }, runtime: context.piRuntime,
+    workspace: { ...context.activeWorkspace }, runtime: context.piRuntime, admin: context.piAdmin,
     files: context.workspaceService, epoch: context.workspaceEpoch || 0,
   };
 }
@@ -24,9 +24,11 @@ export function enqueueWorkspaceOperation(context, operation) {
   context.workspaceSwitchQueue = result.catch(() => {});
   return result;
 }
-export function withWorkspaceSnapshot(context, snapshot, requestedId, operation) {
+export function withWorkspaceSnapshot(context, snapshot, requestedId, operation, { signal, maintenance = false } = {}) {
   return enqueueWorkspaceOperation(context, async () => {
     assertWorkspaceSnapshot(context, snapshot, requestedId);
+    if (maintenance && snapshot.admin?.maintenanceActive) throw mutationError(409, '配置维护中，请稍后重试');
+    if (signal?.aborted) throw mutationError(499, '操作已取消');
     return operation(snapshot);
   });
 }

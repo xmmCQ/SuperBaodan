@@ -1,3 +1,5 @@
+import { prepareWorkspace, workspaceLayout } from './workspace-layout.mjs';
+import { createWorkspaceSettings, workspaceResourceOptions } from './workspace-resources.mjs';
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -9,6 +11,7 @@ import { loadPiSdk, statusError } from "./pi-admin.mjs";
 import { transferSkillDirectory } from './skill-transfer.mjs';
 import { openSkillDirectory } from './open-skill-directory.mjs';
 import { SkillDirectoryCache } from './skill-directory-cache.mjs';
+import { markSkillCollisions } from './skill-collisions.mjs';
 
 const execFileAsync = promisify(execFile);
 const SKILL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
@@ -165,17 +168,23 @@ export class SkillManager {
 
   get homeDir() { return this.env.USERPROFILE || os.homedir(); }
   get globalRoot() { return path.join(this.agentDir, "skills"); }
-  get projectRoot() { return path.join(this.cwd, ".pi", "skills"); }
+  get projectRoot() { return workspaceLayout(this.cwd).projectSkillRoot; }
   get globalLockPath() { return path.join(this.homeDir, ".agents", ".skill-lock.json"); }
-  get projectLockPath() { return path.join(this.cwd, "skills-lock.json"); }
+  get projectLockPath() { return workspaceLayout(this.cwd).projectSkillLockFile; }
 
   async list() {
     const sequence = this.directoryCache.begin();
-    const { DefaultResourceLoader } = await this.loadSdk(this.env);
+    const layout = await prepareWorkspace(this.cwd);
+    this.cwd = layout.workspaceRoot;
+    this.agentDir = await realpath(this.agentDir).catch(() => this.agentDir);
+    const sdk = await this.loadSdk(this.env);
+    const { DefaultResourceLoader } = sdk;
     if (typeof DefaultResourceLoader !== "function") throw statusError(503, "Windows Pi SDK不支持Skill管理，请更新Pi");
     const loader = new DefaultResourceLoader({
       cwd: this.cwd,
       agentDir: this.agentDir,
+      settingsManager: createWorkspaceSettings(sdk, this.cwd, this.agentDir),
+      ...workspaceResourceOptions(layout),
       noExtensions: true,
       noPromptTemplates: true,
       noThemes: true,
@@ -183,15 +192,38 @@ export class SkillManager {
     });
     await loader.reload();
     const loaded = loader.getSkills();
-    const locks = readSkillLocks({ homeDir: this.homeDir, cwd: this.cwd });
-    const skills = [];
-    for (const skill of loaded.skills || []) skills.push(await this.describeSkill(skill, locks));
-    skills.sort((a, b) => a.scope.localeCompare(b.scope) || a.name.localeCompare(b.name, "zh-CN"));
+    const locks = readSkillLocks({ homeDir: this.homeDir, cwd: workspaceLayout(this.cwd).parkRoot });
+    const skills = [], seen = new Set(), diagnostics = [...(loaded.diagnostics || [])];
+    const add = async (skill, loadState) => {
+      const file = await realpath(skill.filePath).catch(() => path.resolve(skill.filePath));
+      const key = process.platform === 'win32' ? file.toLowerCase() : file;
+      if (seen.has(key)) return;
+      skills.push({ ...await this.describeSkill(skill, locks), loadState });
+      seen.add(key);
+    };
+    for (const skill of loaded.skills || []) await add(skill, 'selected');
+    // The SDK omits shadowed entries from loaded.skills. Recover them from its
+    // collision metadata; never guess global/project precedence ourselves.
+    for (const diagnostic of loaded.diagnostics || []) {
+      const collision = diagnostic.collision;
+      if (collision?.resourceType !== 'skill' || !collision.loserPath) continue;
+      try {
+        const parsed = parseSkillMarkdown(await readFile(collision.loserPath, 'utf8'));
+        await add({
+          name: parsed.name, description: parsed.description, filePath: collision.loserPath,
+          disableModelInvocation: scalarFromSpan(parsed.lines, parsed.spans.get(DISABLE_KEY)) === 'true',
+        }, 'shadowed');
+      } catch (error) {
+        diagnostics.push({ type: 'warning', path: collision.loserPath, message: `无法读取同名技能副本：${error.message}` });
+      }
+    }
+    await markSkillCollisions(skills);
+    skills.sort((a, b) => Number(Boolean(b.collision)) - Number(Boolean(a.collision)) || a.scope.localeCompare(b.scope) || a.name.localeCompare(b.name, "zh-CN"));
     const cliAvailable = await this.isCliAvailable();
     await this.directoryCache.publish(skills, sequence);
     return {
       skills,
-      diagnostics: (loaded.diagnostics || []).map(safeDiagnostic),
+      diagnostics: diagnostics.map(safeDiagnostic),
       cliAvailable,
     };
   }
@@ -215,6 +247,7 @@ export class SkillManager {
       description: skill.description || "",
       filePath,
       scope,
+      origin: scope === "project" ? "宝蛋项目技能" : scope === "global" ? "全局技能" : isInside(filePath, this.cwd) ? "用户项目（只读）" : "其他只读来源",
       source: skill.sourceInfo?.source || scope,
       sourceInfo: skill.sourceInfo || null,
       disableModelInvocation: Boolean(skill.disableModelInvocation),
@@ -345,7 +378,7 @@ export class SkillManager {
     return this.mutateWithMaintenance(async () => {
       const filePath = path.join(this.rootForScope(scope), name, "SKILL.md");
       await this.assertSafeExistingSkill(scope, name, filePath);
-      const locks = readSkillLocks({ homeDir: this.homeDir, cwd: this.cwd });
+      const locks = readSkillLocks({ homeDir: this.homeDir, cwd: workspaceLayout(this.cwd).parkRoot });
       if (annotateInstall({ name }, locks, scope)) throw statusError(409, "skills.sh管理的Skill不能直接编辑，请使用更新功能");
       const current = await readFile(filePath, "utf8");
       const updated = payload.mode === "raw" ? String(payload.content || "") : updateStructuredSkillMarkdown(current, payload);
@@ -363,7 +396,7 @@ export class SkillManager {
     return this.mutateWithMaintenance(async () => {
       const filePath = path.join(this.rootForScope(scope), name, "SKILL.md");
       await this.assertSafeExistingSkill(scope, name, filePath);
-      const locks = readSkillLocks({ homeDir: this.homeDir, cwd: this.cwd });
+      const locks = readSkillLocks({ homeDir: this.homeDir, cwd: workspaceLayout(this.cwd).parkRoot });
       if (annotateInstall({ name }, locks, scope)) throw statusError(409, "skills.sh管理的Skill必须使用卸载功能");
       const snapshot = await this.backupMutation(`delete-${scope}-${name}`, { scope, name });
       try { await rm(path.dirname(filePath), { recursive: true, force: false }); }
@@ -387,7 +420,7 @@ export class SkillManager {
       const skill = await this.findSkill(scope, name);
       if (!skill.writable || skill.install) throw statusError(403, '只读或软件包管理的 Skill 不支持互转');
       if (!payload.revision || payload.revision !== skill.revision || payload.id !== skill.id) throw statusError(409, 'Skill 已变化，请刷新后重试');
-      const locks = readSkillLocks({ homeDir: this.homeDir, cwd: this.cwd });
+      const locks = readSkillLocks({ homeDir: this.homeDir, cwd: workspaceLayout(this.cwd).parkRoot });
       if (annotateInstall({ name }, locks, targetScope)) throw statusError(409, '目标范围已有同名安装记录，不会覆盖');
       await this.assertSafeExistingSkill(scope, name, skill.filePath);
       const target = path.join(this.rootForScope(targetScope), name);
@@ -430,6 +463,7 @@ export class SkillManager {
   mutateWithMaintenance(operation) {
     return this.piAdmin.withMaintenance(async () => {
       this.directoryCache.clear();
+      this.cwd = (await prepareWorkspace(this.cwd)).workspaceRoot;
       try { return await operation(); }
       finally { this.directoryCache.clear(); }
     });
@@ -463,7 +497,7 @@ export class SkillManager {
     const invocation = this.npxInvocation();
     try {
       const result = await this.execFileImpl(invocation.command, [...invocation.prefix, ...args], {
-        cwd: args.includes("-g") ? undefined : this.cwd,
+        cwd: args.includes("-g") ? undefined : workspaceLayout(this.cwd).parkRoot,
         env: { ...this.env, FORCE_COLOR: "0" },
         timeout: CLI_TIMEOUT_MS,
         windowsHide: true,

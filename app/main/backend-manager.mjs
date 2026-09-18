@@ -37,7 +37,6 @@ export class BackendManager extends EventEmitter {
     await Promise.all([
       mkdir(this.dataRoot, { recursive: true }),
       mkdir(this.logDir, { recursive: true }),
-      mkdir(path.join(this.dataRoot, "workspace"), { recursive: true }),
       mkdir(this.config.piAgentDir, { recursive: true }),
     ]);
     const todoFile = path.join(this.dataRoot, "work-todo.md");
@@ -46,12 +45,13 @@ export class BackendManager extends EventEmitter {
   }
 
   start() {
-    if (this.state === "running") return Promise.resolve(this.lastReady);
+    if (this.state === "running" && !this.currentRun?.exitInfo) return Promise.resolve(this.lastReady);
     if (this.startPromise) return this.startPromise;
     if (this.state === "stopping" && this.stopPromise) return this.stopPromise.then((stopped) => {
       if (!stopped) throw new BackendStartError("STOP_INCOMPLETE", "后台服务尚未停止");
       return this.start();
     });
+    if (this.currentRun) return Promise.reject(new BackendStartError('STOP_INCOMPLETE', '原后台服务尚未退出'));
     const run = this.createRun();
     this.currentRun = run;
     this.state = "starting";
@@ -97,9 +97,13 @@ export class BackendManager extends EventEmitter {
       this.emit("state", { state: this.state, runId: run.id });
       return ready;
     } catch (error) {
-      if (isStartCancelled(error) || run.controller.signal.aborted) throw new BackendStartCancelled();
-      if (this.currentRun === run) this.state = "failed";
-      if (run.child && !run.exitInfo) await this.terminateRun(run);
+      const cancelled = isStartCancelled(error) || run.controller.signal.aborted;
+      if (!cancelled && this.currentRun === run) this.state = 'failed';
+      if (!run.child || run.spawnFailed) await this.handleExit(run, null, null);
+      else if (!cancelled && !await this.terminateRun(run)) {
+        throw new BackendStartError('STOP_INCOMPLETE', '原后台服务尚未退出');
+      }
+      if (cancelled) throw new BackendStartCancelled();
       throw error;
     }
   }
@@ -114,6 +118,8 @@ export class BackendManager extends EventEmitter {
     child.on("message", (message) => this.handleMessage(run, message));
     child.once("error", (error) => {
       run.startError = error;
+      // Node reports spawn failure without an exit event when no PID was created.
+      run.spawnFailed = !child.pid;
       run.rejectReady?.(new BackendStartError("SPAWN_ERROR", error.message));
     });
     child.once("exit", (code, signal) => void this.handleExit(run, code, signal));
@@ -146,22 +152,30 @@ export class BackendManager extends EventEmitter {
       run.resolveReady = (value) => finish(resolve, value);
       run.rejectReady = (error) => finish(reject, error);
       run.controller.signal.addEventListener("abort", cancelled, { once: true });
+      if (run.startError) finish(reject, new BackendStartError('SPAWN_ERROR', run.startError.message));
       if (run.exitInfo) finish(reject, new BackendStartError("EARLY_EXIT", `后台服务提前退出（代码 ${run.exitInfo.code ?? "未知"}）`));
     });
   }
 
-  async handleExit(run, code, signal) {
+  handleExit(run, code, signal) {
+    if (run.cleanupPromise) return run.cleanupPromise;
     run.exitInfo = { code, signal };
-    await Promise.race([Promise.all([run.stdout.close(), run.stderr.close()]), wait(1_500)]);
-    run.resolveExit(run.exitInfo);
-    run.rejectReady?.(new BackendStartError("EARLY_EXIT", `后台服务提前退出（代码 ${code ?? "未知"}）`));
-    if (this.currentRun !== run) return;
-    const expected = this.state === "stopping" || run.shutdownRequested;
-    this.currentRun = null;
-    this.lastReady = null;
-    this.state = expected ? "idle" : "failed";
-    this.emit("exit", { runId: run.id, code, signal, expected });
-    this.emit("state", { state: this.state, runId: run.id });
+    run.cleanupPromise = (async () => {
+      await Promise.race([
+        Promise.all([run.stdout, run.stderr].map(writer => Promise.resolve().then(() => writer.close()).catch(error => this.reportLogError(error)))),
+        wait(1_500),
+      ]);
+      run.resolveExit(run.exitInfo);
+      run.rejectReady?.(new BackendStartError('EARLY_EXIT', `后台服务提前退出（代码 ${code ?? '未知'}）`));
+      if (this.currentRun !== run) return;
+      const expected = this.state === 'stopping' || run.shutdownRequested;
+      this.currentRun = null;
+      this.lastReady = null;
+      this.state = expected ? 'idle' : 'failed';
+      this.emit('exit', { runId: run.id, code, signal, expected });
+      this.emit('state', { state: this.state, runId: run.id });
+    })();
+    return run.cleanupPromise;
   }
 
   stop(timeoutMs = this.stopTimeoutMs) {
@@ -181,8 +195,7 @@ export class BackendManager extends EventEmitter {
     if (this.currentRun !== run) return true;
     if (run.exitInfo) return Boolean(await waitForPromise(run.exitPromise, timeoutMs));
     if (!run.child) {
-      this.currentRun = null;
-      this.state = "idle";
+      await this.handleExit(run, null, null);
       return true;
     }
     run.shutdownRequested = true;
@@ -206,8 +219,9 @@ export class BackendManager extends EventEmitter {
     this.state = "stopping";
     run.controller.abort();
     if (this.startPromise) await waitForPromise(this.startPromise.catch(() => {}), this.killTimeoutMs);
-    if (run.exitInfo || this.currentRun !== run) return true;
-    if (!run.child) { this.currentRun = null; this.state = "idle"; return true; }
+    if (this.currentRun !== run) return true;
+    if (run.exitInfo) return Boolean(await waitForPromise(run.exitPromise, this.killTimeoutMs));
+    if (!run.child) { await this.handleExit(run, null, null); return true; }
     if (!safeKill(run.child, "SIGTERM")) return false;
     if (await waitForPromise(run.exitPromise, this.killTimeoutMs)) return true;
     if (!safeKill(run.child, "SIGKILL")) return false;
@@ -215,7 +229,8 @@ export class BackendManager extends EventEmitter {
   }
 
   async terminateRun(run) {
-    if (!run.child || run.exitInfo) return true;
+    if (!run.child || run.spawnFailed) { await this.handleExit(run, null, null); return true; }
+    if (run.exitInfo) return Boolean(await waitForPromise(run.exitPromise, this.killTimeoutMs));
     safeKill(run.child, "SIGTERM");
     if (await waitForPromise(run.exitPromise, this.killTimeoutMs)) return true;
     safeKill(run.child, "SIGKILL");

@@ -1,7 +1,7 @@
 export function createProjectPrompt({ mount, invoke, getWorkspace, uiDialogs }) {
   mount.innerHTML = `<div class="project-prompt-head"><h3>项目提示词</h3><button type="button" class="project-prompt-reload">重新读取</button></div>
     <p class="project-prompt-context"></p><p class="project-prompt-path"></p>
-    <p class="project-prompt-hint">编辑当前项目根目录的 AGENTS.md。保存后立即重载，当前会话的下一次提问会使用新提示词；不清空聊天记录。切换项目请使用页面左上角的项目选择器。</p>
+    <p class="project-prompt-hint">编辑当前工作区 BaodanPark 内的宝蛋专属 AGENTS.md，保留用户原有项目规则。保存后立即重载，下一次提问生效，不清空聊天记录。切换工作区请使用左上角选择器。</p>
     <textarea class="project-prompt-editor" aria-label="项目提示词内容" spellcheck="false" placeholder="例如：项目背景、语言风格、编码规范、工作约定…" disabled></textarea>
     <div class="project-prompt-actions"><span class="project-prompt-status" role="status"></span><button type="button" class="project-prompt-save" disabled>保存并生效</button></div>`;
   const editor = mount.querySelector('textarea'), reload = mount.querySelector('.project-prompt-reload'), save = mount.querySelector('.project-prompt-save'), status = mount.querySelector('.project-prompt-status');

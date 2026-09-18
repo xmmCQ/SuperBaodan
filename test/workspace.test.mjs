@@ -19,6 +19,23 @@ async function harness() {
   return { root, workspace, service, cleanup: temp.cleanup };
 }
 
+test('六层目录按需读取：未读目录不带children，已读空目录为[]，Park默认不递归', async t => {
+  const temp = await createTempProject(); t.after(() => temp.cleanup());
+  await temp.write('a/b/c/d/e/f/deep.txt', 'deep'); await temp.ensureDir('empty');
+  await temp.write('BaodanPark/tmp/process.txt', 'temporary');
+  const service = await new WorkspaceService(temp.root).initialize();
+  const first = await service.tree('', 4);
+  const empty = first.entries.find(e => e.name === 'empty'); assert.deepEqual(empty.children, []);
+  const park = first.entries.find(e => e.name === 'BaodanPark'); assert.equal(park.processDirectory, true); assert.equal('children' in park, false);
+  let entry = first.entries.find(e => e.name === 'a');
+  for (const name of ['b','c','d']) entry = entry.children.find(e => e.name === name);
+  assert.equal('children' in entry, false);
+  const next = await service.tree(entry.path, 1); entry = next.entries.find(e => e.name === 'e');
+  assert.equal('children' in entry, false);
+  const last = await service.tree(entry.path, 2); assert.equal(last.entries[0].children[0].path, 'a/b/c/d/e/f/deep.txt');
+  assert.ok((await service.tree('BaodanPark', 3)).entries[0].children.some(e => e.name === 'process.txt'));
+});
+
 test("workspace paths reject traversal, absolute paths, and symlink escapes", async () => {
   const value = await harness();
   try {

@@ -1,3 +1,4 @@
+import { createWorkspaceSettings } from './workspace-resources.mjs';
 import { copyFile, mkdir, mkdtemp, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import os from "node:os";
@@ -276,7 +277,7 @@ export class PiAdmin {
 
   async preferences() {
     const { SettingsManager } = await loadPiSdk(this.env);
-    const settings = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted: true });
+    const settings = createWorkspaceSettings({ SettingsManager }, this.cwd, this.agentDir);
     return { enabledModels: settings.getEnabledModels() || [] };
   }
 
@@ -285,7 +286,7 @@ export class PiAdmin {
     let available;
     try { available = await runtime.getAvailable(undefined, { signal: AbortSignal.timeout(15_000) }); }
     catch { available = runtime.getAvailableSnapshot(); }
-    const settings = sdk.SettingsManager.create(this.cwd, this.agentDir, { projectTrusted: true });
+    const settings = createWorkspaceSettings(sdk, this.cwd, this.agentDir);
     const models = [...available].map((model) => ({
       provider: model.provider,
       id: model.id,
@@ -306,7 +307,7 @@ export class PiAdmin {
   async savePreferences(body) {
     return this.withMaintenance(async () => {
       const { SettingsManager } = await loadPiSdk(this.env);
-      const settings = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted: true });
+      const settings = createWorkspaceSettings({ SettingsManager }, this.cwd, this.agentDir);
       if (body.defaultModel == null) {
         // Pi has no clear pair API; preserve current defaults when omitted.
       } else {

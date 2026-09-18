@@ -1,3 +1,4 @@
+import { prepareWorkspace } from './workspace-layout.mjs';
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -13,9 +14,10 @@ const ACTIVITY_EVENTS = new Set(["message_start", "message_update", "message_end
 const busyError = (message = "Windows Pi 正在切换或关闭，请稍后重试") => Object.assign(new Error(message), { statusCode: 409 });
 
 export class PiSdkRuntime extends EventEmitter {
-  constructor({ cwd, sessionDir, agentDir, log = console, idleTimeoutMs, stopTimeoutMs = 5000, createHost = createSdkHost, renameSaved = renameSavedSession }) {
+  constructor({ cwd, sessionDir, agentDir, dataPaths, log = console, idleTimeoutMs, stopTimeoutMs = 5000, createHost = createSdkHost, renameSaved = renameSavedSession }) {
     super();
     Object.assign(this, { cwd, sessionDir, agentDir, log, createHost, renameSaved });
+    this.dataPaths = dataPaths ? Object.freeze({ ...dataPaths }) : undefined;
     this.idleTimeoutMs = positiveNumber(idleTimeoutMs ?? process.env.SUPER_BAODAN_PI_IDLE_MS, 600000);
     this.stopTimeoutMs = positiveNumber(stopTimeoutMs, 5000);
     this.host = null;
@@ -90,11 +92,12 @@ export class PiSdkRuntime extends EventEmitter {
     if (this.closed || this.quiescing) throw new Error("Windows Pi 运行时已关闭");
     this.runtimeState = "starting";
     try {
-      await Promise.all([mkdir(this.cwd, { recursive: true }), mkdir(this.sessionDir, { recursive: true })]);
+      await prepareWorkspace(this.cwd);
+      await mkdir(this.sessionDir, { recursive: true });
       const resumeUnsaved = sessionPath && sameSessionPath(sessionPath, this.activeSessionPath) && !existsSync(sessionPath) && this.unsavedManager;
       if (sessionPath && !resumeUnsaved) await assertSessionPath(sessionPath, this.sessionDir);
       const { host, theme } = await this.createHost({
-        cwd: this.cwd, agentDir: this.agentDir, sessionDir: this.sessionDir,
+        cwd: this.cwd, agentDir: this.agentDir, sessionDir: this.sessionDir, dataPaths: this.dataPaths,
         sessionPath: resumeUnsaved ? null : sessionPath, sessionManager: resumeUnsaved || undefined, log: this.log,
       });
       this.host = host;

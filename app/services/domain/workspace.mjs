@@ -88,8 +88,9 @@ export class WorkspaceService {
           try { assertInside(await realpath(full), this.rootReal); safe = true; } catch {}
           entries.push({ name: child.name, path: relative, kind: "symlink", safe });
         } else if (child.isDirectory()) {
-          const entry = { name: child.name, path: relative, kind: "directory" };
-          if (level < maxDepth) entry.children = await visit(full, level + 1);
+          const processDirectory = relative.toLowerCase() === 'baodanpark';
+          const entry = { name: child.name, path: relative, kind: "directory", ...(processDirectory ? { processDirectory: true } : {}) };
+          if (level < maxDepth && !processDirectory) entry.children = await visit(full, level + 1);
           entries.push(entry);
         } else if (child.isFile()) {
           const info = await lstat(full);
@@ -114,7 +115,9 @@ export class WorkspaceService {
         inspected += 1;
         if (entry.isSymbolicLink()) continue;
         const full = path.join(directory, entry.name);
-        if (entry.isDirectory()) queue.push(full);
+        if (entry.isDirectory()) {
+          if (toRelative(this.rootReal, full).toLowerCase() !== 'baodanpark') queue.push(full);
+        }
         else if (entry.isFile() && entry.name.toLocaleLowerCase().includes(needle)) {
           const info = await lstat(full);
           results.push({ name: entry.name, path: toRelative(this.rootReal, full), size: info.size, previewable: Boolean(previewType(full, info.size)) });

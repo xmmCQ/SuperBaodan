@@ -4,6 +4,7 @@ import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readBundle } from "./source-bundles.mjs";
+import { resolveDesktopConfig, createBackendEnvironment } from '../app/main/config.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const homeHtml = await readFile(path.join(ROOT, "app/renderer/index.html"), "utf8");
@@ -43,5 +44,13 @@ test("工作区不执行或展示Git状态", async () => {
 test("工作待办只使用超级宝蛋内部文件", async () => {
   assert.match(serverSource, /todoFile: path\.join\(dataRoot, 'work-todo\.md'\)/);
   assert.doesNotMatch(serverSource, /Obsidian Vault/);
-  await assert.doesNotReject(access(path.join(ROOT, "data/work-todo.md")));
+  await assert.doesNotReject(access(path.join(ROOT, 'app/main/default-work-todo.md')));
+  for (const isPackaged of [false, true]) {
+    const localAppData = path.join(ROOT, 'isolated-user-profile');
+    const config = resolveDesktopConfig({ app: { isPackaged }, root: path.join(ROOT, 'other-install'), env: { LOCALAPPDATA: localAppData } });
+    const env = createBackendEnvironment(config, 'fixture-run', {});
+    assert.equal(env.SUPER_BAODAN_TODO_FILE, path.join(config.dataRoot, 'work-todo.md'));
+    assert.ok(env.SUPER_BAODAN_TODO_FILE.startsWith(localAppData + path.sep));
+    assert.ok(!env.SUPER_BAODAN_TODO_FILE.startsWith(config.root + path.sep));
+  }
 });

@@ -1,3 +1,4 @@
+import { captureWorkspace, withWorkspaceSnapshot } from '../workspace-operations.mjs';
 import { fault } from "../../shared/errors.js";
 import { existsSync } from "node:fs";
 
@@ -22,11 +23,12 @@ export function registerSystemCommands(commands) {
     };
   });
 
-  commands.set("agent.start", async (args, context) => {
-    const body = args;
-    context.assertActiveWorkspace(body.workspaceId);
-    await context.ensureActiveStarted();
-    return { ok: true, url: "/assistant.html" };
+  commands.set('agent.start', async (args, context, signal) => {
+    const snapshot = captureWorkspace(context, args.workspaceId);
+    return withWorkspaceSnapshot(context, snapshot, args.workspaceId, async () => {
+      await context.ensureActiveStarted(snapshot);
+      return { ok: true, url: '/assistant.html' };
+    }, { signal, maintenance: true });
   });
 
   commands.set("documents.read", async (args, context) => {

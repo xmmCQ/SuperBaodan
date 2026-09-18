@@ -63,17 +63,14 @@ test("workspace registry validates names, absolute paths and directory browsing"
   } finally { await value.cleanup(); }
 });
 
-test("workspace registry falls back to default when the last active directory disappears", async () => {
+test("workspace registry refuses silent fallback when the last active directory disappears", async () => {
   const value = await harness();
   try {
     const created = await value.registry.add({ name: "临时工作区", path: value.secondRoot });
     await value.registry.setActive(created.id);
     await rm(value.secondRoot, { recursive: true, force: true });
-    const reloaded = await new WorkspaceRegistry({ filePath: value.filePath, backupDir: path.join(value.root, "backups-2"), defaultRoot: value.defaultRoot, log: { warn() {} } }).initialize();
-    assert.equal(reloaded.active().isDefault, true);
-    assert.match(reloaded.fallbackWarning, /已切换到默认工作区/);
-    const missing = (await reloaded.list()).items.find((item) => item.id === created.id);
-    assert.equal(missing.available, false);
+    await assert.rejects(new WorkspaceRegistry({ filePath: value.filePath, backupDir: path.join(value.root, "backups-2"), defaultRoot: value.defaultRoot, log: { warn() {} } }).initialize(), /未自动切换/);
+    assert.equal(JSON.parse(await readFile(value.filePath, 'utf8')).activeWorkspaceId, created.id);
   } finally { await value.cleanup(); }
 });
 
