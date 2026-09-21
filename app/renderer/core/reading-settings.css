@@ -1,0 +1,24 @@
+.reading-settings-inline { max-width: 640px; padding: 0; color: var(--ui-text); }
+.reading-settings-inline header { margin-bottom: 20px; }
+.reading-settings-inline header h3 { margin: 0; font-size: var(--ui-section); font-weight: 600; line-height: 1.4; }
+.reading-settings-inline label { display: grid; grid-template-columns: 160px minmax(160px, 320px); align-items: center; gap: 16px; margin: 16px 0; font-size: var(--ui-body); }
+.reading-settings-inline select { width: 100%; min-width: 0; height: var(--ui-form-height); padding: 0 12px; border: 1px solid var(--ui-control-border); border-radius: var(--ui-radius-input); background: white; }
+.reading-settings-inline p { font-size: var(--ui-meta); line-height: 1.5; color: var(--ui-secondary); }
+.reading-reset { min-height: var(--ui-form-height); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); padding: 8px 16px; background: var(--ui-canvas); color: var(--ui-text); cursor: pointer; }
+
+/* Explicit mappings keep the existing preference values, identical on both pages. */
+#messages, #chatMessages { overflow-anchor: none; --reading-font: 16px; --reading-code: 14px; }
+:is(#messages, #chatMessages)[data-reading-size="small"] { --reading-font: 14px; }
+:is(#messages, #chatMessages)[data-reading-size="standard"] { --reading-font: 16px; }
+:is(#messages, #chatMessages)[data-reading-size="large"] { --reading-font: 18px; --reading-code: 16px; }
+#messages > .message .bubble, #chatMessages > .message { font-size: var(--reading-font); line-height: 1.65; }
+:is(#messages, #chatMessages) .markdown-body :is(p, li, blockquote) { font-size: inherit; }
+#messages .tool-result, #messages .tool-card pre, :is(#messages, #chatMessages) .markdown-code-block pre code { font-size: var(--reading-code); line-height: 1.6; }
+#messages[data-reading-width="wide"] { padding-inline: 20px; }
+#messages[data-reading-width="wide"] > .message { max-width: 100%; }
+#chatMessages[data-reading-width="wide"] > .message { max-width: 100%; }
+#messages > .message, #messages .message-inner, #messages .bubble, #chatMessages > .message { min-width: 0; box-sizing: border-box; }
+#messages .markdown-body, #chatMessages .markdown-body { max-width: 100%; overflow-wrap: anywhere; }
+#messages .markdown-code-block, #chatMessages .markdown-code-block { min-width: 0; max-width: 100%; }
+#messages .markdown-body table, #chatMessages .markdown-body table { max-width: 100%; overflow-x: auto; }
+#messages .markdown-body a, #chatMessages .markdown-body a { overflow-wrap: anywhere; word-break: break-word; }

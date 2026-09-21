@@ -1,0 +1,32 @@
+.markdown-body { min-width: 0; color: inherit; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; }
+.markdown-body > :first-child { margin-top: 0 !important; }
+.markdown-body > :last-child { margin-bottom: 0 !important; }
+.markdown-body p { margin: 0 0 12px; white-space: normal; }
+.markdown-body :is(h1,h2,h3,h4,h5,h6) { margin: 20px 0 8px; color: inherit; line-height: 1.4; font-weight: 600; }
+.markdown-body h1 { font-size: 1.5em; }
+.markdown-body h2 { padding-bottom: 4px; border-bottom: 1px solid var(--ui-divider); font-size: 1.25em; }
+.markdown-body h3 { font-size: 1.125em; }
+.markdown-body :is(h4,h5,h6) { font-size: 1em; }
+.markdown-body :is(ul,ol) { margin: 8px 0 12px; padding-left: 24px; }
+.markdown-body li { margin: 4px 0; }
+.markdown-body li > :is(ul,ol) { margin: 4px 0; }
+.markdown-body blockquote { margin: 12px 0; padding: 8px 12px; border-left: 3px solid var(--ui-control-border); border-radius: 0 8px 8px 0; color: var(--ui-secondary); background: var(--ui-surface); }
+.markdown-body blockquote > :last-child { margin-bottom: 0; }
+.markdown-body hr { height: 1px; margin: 16px 0; border: 0; background: var(--ui-divider); }
+.markdown-body a { color: var(--ui-link); text-decoration: underline; text-underline-offset: 2px; }
+.markdown-body a:hover { text-decoration-thickness: 2px; }
+.markdown-body code { padding: 2px 4px; border: 1px solid var(--ui-border); border-radius: 4px; color: var(--ui-text); background: var(--ui-surface-soft); font: 14px/1.6 var(--ui-mono); }
+.markdown-code-block { max-width: 100%; margin: 12px 0; overflow: hidden; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); }
+.markdown-code-head { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 8px 4px 12px; border-bottom: 1px solid var(--ui-divider); color: var(--ui-secondary); background: var(--ui-surface-soft); font-size: var(--ui-meta); }
+.markdown-copy-button { min-height: 32px; padding: 4px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); color: var(--ui-text); background: #fff; cursor: pointer; font-size: var(--ui-body); }
+.markdown-copy-button:hover { border-color: var(--ui-control-border); background: var(--ui-surface); }
+.markdown-code-block pre { max-width: 100%; margin: 0; padding: 12px 16px; overflow: auto; background: transparent; }
+.markdown-code-block pre code { display: block; min-width: max-content; padding: 0; border: 0; color: var(--ui-text); background: transparent; white-space: pre; overflow-wrap: normal; font: 14px/1.6 var(--ui-mono); }
+.markdown-body table { display: block; width: max-content; max-width: 100%; margin: 12px 0; overflow-x: auto; border-collapse: collapse; font-size: 1em; }
+.markdown-body :is(th,td) { min-width: 82px; padding: 8px 12px; border: 1px solid var(--ui-border); text-align: left; vertical-align: top; }
+.markdown-body th { color: var(--ui-text); background: var(--ui-surface-soft); font-weight: 600; }
+.markdown-body tr:nth-child(even) td { background: var(--ui-surface); }
+.markdown-image-link { display: inline-block; margin: 4px 0; color: var(--ui-secondary); font-size: 1em; }
+.markdown-plain { white-space: pre-wrap; }
+.message.assistant > .markdown-body { width: 100%; }
+.file-preview .markdown-body { padding: 0 2px 12px; }

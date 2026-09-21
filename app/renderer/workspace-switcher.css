@@ -1,0 +1,47 @@
+.workspace-trigger { min-width: 0; max-width: 240px; height: 36px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); background: white; color: var(--ui-text); cursor: pointer; font: inherit; font-size: var(--ui-body); }
+.workspace-trigger:hover { border-color: var(--ui-control-border); background: var(--ui-surface); }
+.workspace-trigger svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.workspace-trigger [data-workspace-label] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-trigger .workspace-trigger-chevron { width: 12px; height: 12px; color: var(--ui-secondary); }
+.workspace-switcher-dialog, .workspace-picker-dialog { width: 620px; max-width: calc(100vw - 48px); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-panel); background: white; color: var(--ui-text); box-shadow: var(--ui-shadow-modal); }
+.workspace-switcher-dialog[open], .workspace-picker-dialog[open] { display: flex; flex-direction: column; }
+.workspace-switcher-dialog::backdrop, .workspace-picker-dialog::backdrop { background: rgb(10 10 10 / 16%); }
+.workspace-switcher-dialog.busy, .workspace-picker-dialog.busy { pointer-events: none; opacity: .78; }
+.workspace-switcher-head { min-height: 64px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--ui-divider); }
+.workspace-switcher-head > div { display: grid; gap: 4px; }
+.workspace-switcher-head strong { font-size: var(--ui-dialog-title); font-weight: 600; }
+.workspace-switcher-head span { font-size: var(--ui-meta); color: var(--ui-secondary); }
+.workspace-switcher-head > button { width: 36px; height: 36px; border: 1px solid var(--ui-border); border-radius: 50%; background: transparent; color: var(--ui-secondary); font-size: 22px; cursor: pointer; }
+.workspace-switcher-head > button:hover { background: var(--ui-surface); }
+.workspace-switcher-toolbar { flex: none; display: flex; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--ui-divider); }
+.workspace-switcher-toolbar input { min-width: 0; flex: 1; height: 36px; padding: 0 12px; border: 1px solid var(--ui-control-border); border-radius: 8px; background: white; color: var(--ui-text); }
+.workspace-switcher-toolbar button, .workspace-picker-footer .primary { height: 36px; padding: 0 16px; border: 0; border-radius: var(--ui-radius-pill); background: var(--ui-primary); color: white; font-size: var(--ui-body); font-weight: 600; cursor: pointer; }
+.workspace-switcher-list { flex: 1; min-height: 0; max-height: 480px; overflow: auto; padding: 12px; }
+.workspace-switcher-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid transparent; border-radius: 12px; }
+.workspace-switcher-row:hover { background: var(--ui-surface); border-color: var(--ui-border); }
+.workspace-switcher-row.active { background: var(--ui-surface-soft); border-color: var(--ui-border); }
+.workspace-switcher-row.unavailable { opacity: .6; }
+.workspace-switcher-main { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; text-align: left; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.workspace-switcher-main:disabled { cursor: default; }
+.workspace-switcher-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ui-body); font-weight: 600; }
+.workspace-switcher-main span { grid-column: 1/2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-secondary); font: 12px/1.5 var(--ui-mono); }
+.workspace-switcher-main small { grid-column: 2; grid-row: 1/3; align-self: center; color: var(--ui-success); font-size: var(--ui-meta); }
+.workspace-switcher-actions { display: flex; gap: 4px; }
+.workspace-switcher-action { min-height: 32px; padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); background: white; color: var(--ui-secondary); font-size: var(--ui-body); cursor: pointer; }
+.workspace-switcher-action.danger { color: var(--ui-danger); border-color: #e9b9bd; }
+.workspace-switcher-empty { padding: 24px; text-align: center; color: var(--ui-secondary); font-size: var(--ui-body); }
+.workspace-picker-dialog form { display: flex; flex-direction: column; min-height: 0; }
+.workspace-picker-dialog label { flex: none; display: grid; gap: 8px; padding: 16px 24px 0; color: var(--ui-secondary); font-size: var(--ui-body); }
+.workspace-picker-dialog label > input, .workspace-picker-path input { height: 40px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--ui-control-border); border-radius: 8px; background: white; color: var(--ui-text); }
+.workspace-picker-path { display: flex; gap: 8px; }
+.workspace-picker-path input { min-width: 0; flex: 1; }
+.workspace-picker-path button, .workspace-picker-footer button { height: 40px; padding: 0 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); background: white; color: var(--ui-text); font-size: var(--ui-body); cursor: pointer; }
+.workspace-picker-path [data-up] { width: 40px; padding: 0; }
+.workspace-directory-list { height: 280px; min-height: 80px; overflow: auto; margin: 16px 24px 0; padding: 8px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); }
+.workspace-directory-entry { width: 100%; height: 32px; display: block; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ui-text); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.workspace-directory-entry:hover { background: var(--ui-surface-soft); }
+.workspace-picker-footer { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px 20px; }
+.workspace-picker-footer .primary { height: 40px; }
+.assistant-page .workspace-trigger { width: 100%; max-width: none; justify-content: flex-start; background: white; }
+.assistant-page .sidebar > .workspace-trigger { margin: 0 0 12px; }
+.assistant-page .workspace-trigger [data-workspace-label] { flex: 1; text-align: left; }

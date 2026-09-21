@@ -1,0 +1,50 @@
+:root {
+  --ui-font: "DM Sans", Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", Helvetica, Arial, sans-serif;
+  --ui-mono: Consolas, "Cascadia Code", monospace;
+  --ui-canvas: #fff;
+  --ui-surface: #f7f8fa;
+  --ui-surface-soft: #f2f3f5;
+  --ui-ink: #0a0a0a;
+  --ui-text: #222;
+  --ui-secondary: #5f6772;
+  --ui-muted: #667085;
+  --ui-border: #e5e7eb;
+  --ui-control-border: #89919d;
+  --ui-divider: #eceef1;
+  --ui-primary: #0a0a0a;
+  --ui-primary-hover: #222;
+  --ui-link: #1456f0;
+  --ui-focus: #1456f0;
+  --ui-success: #4f6b2f;
+  --ui-brand: #789a45;
+  --ui-danger: #b42335;
+  --ui-body: 14px;
+  --ui-meta: 12px;
+  --ui-section: 16px;
+  --ui-panel-title: 18px;
+  --ui-dialog-title: 20px;
+  --ui-brand-title: 24px;
+  --ui-form-height: 40px;
+  --ui-toolbar-height: 36px;
+  --ui-compact-height: 32px;
+  --ui-radius-input: 8px;
+  --ui-radius-card: 16px;
+  --ui-radius-panel: 20px;
+  --ui-radius-pill: 9999px;
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+  --ui-space-8: 32px;
+  --ui-shadow-subtle: 0 1px 2px rgb(0 0 0 / 4%);
+  --ui-shadow-modal: 0 12px 32px rgb(0 0 0 / 12%);
+  font-family: var(--ui-font);
+  font-size: var(--ui-body);
+  line-height: 1.5;
+  color-scheme: light;
+}
+button, input, select, textarea { font-family: inherit; }
+small { font-size: var(--ui-meta); }
+:where(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }

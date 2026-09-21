@@ -1,0 +1,33 @@
+/* Real desktop pixels: each content region owns its scrolling, never a scaled canvas. */
+html, body { height: 100%; min-width: 0; }
+.home-canvas-host { height: 100dvh; }
+.app-shell {
+  width: 100%; max-width: 1920px; height: 100%; min-height: 0; margin: 0 auto;
+  padding: clamp(12px, 1.25vw, 24px);
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: clamp(12px, 1vw, 16px);
+}
+.topbar { gap: 16px; padding-bottom: 12px; }
+.brand { min-width: 0; }
+.brand-copy { column-gap: 8px; }
+.brand p { grid-column: 1 / -1; margin-top: 4px; }
+.workspace { min-height: 0; grid-template-columns: minmax(0, 66fr) minmax(0, 34fr); gap: clamp(12px, 1vw, 16px); align-items: stretch; }
+.dashboard-column { min-height: 0; }
+.overview-grid { min-height: 0; grid-template-columns: minmax(0, 36fr) minmax(0, 30fr); grid-template-rows: minmax(0, 1fr); gap: clamp(12px, 1vw, 16px); align-items: stretch; }
+.calendar-panel, .day-panel { min-height: 0; padding: clamp(12px, 1.25vw, 24px); display: flex; flex-direction: column; }
+.calendar-panel > :not(.calendar-grid), .day-panel > .panel-heading, .day-view-tabs { flex-shrink: 0; }
+.calendar-grid { flex: 1; min-height: 0; grid-auto-rows: minmax(40px, 1fr); }
+.calendar-day { min-height: 40px; padding: 2px; }
+.day-number { min-width: 24px; height: 24px; padding-inline: 3px; }
+.day-events { left: 4px; right: 4px; bottom: 3px; gap: 3px; }
+.calendar-legend { flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; }
+.day-title-row { flex-wrap: wrap; }
+#dayTasksPane, #dailyRecordsPane { flex: 1; min-height: 0; overflow: hidden; }
+#dayTasksPane > .day-list { height: 100%; max-height: none; align-content: start; }
+#dailyRecordsPane:not(.hidden) { display: flex; flex-direction: column; }
+.daily-record-search, .daily-record-search-status { flex-shrink: 0; }
+#dailyRecordList { flex: 1; min-height: 0; max-height: none; overflow: auto; align-content: start; }
+.chat-panel { position: relative; top: auto; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.chat-panel > :not(.chat-messages) { flex-shrink: 0; }
+.chat-panel > .chat-messages { flex: 1; height: 0; min-height: 0; }
+.chat-header { flex-wrap: wrap; gap: 8px; }
+.chat-composer textarea { min-width: 0; }

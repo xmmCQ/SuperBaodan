@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -e
+
+powershell_exe="/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+args=()
+
+while (($#)); do
+  option="$1"
+  shift
+  case "${option,,}" in
+    -command|-c)
+      args+=("$option")
+      if (($#)); then
+        args+=("try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}; $1")
+        shift
+      fi
+      ;;
+    *) args+=("$option") ;;
+  esac
+done
+
+exec "$powershell_exe" "${args[@]}"
