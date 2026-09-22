@@ -40,6 +40,11 @@ test('技能列表突出双方重复/冲突，展示路径，删除前可确认�
   await browser.evaluate("document.querySelector('[data-skill-id=same-project] .skill-list-select').click()");
   assert.ok((await browser.evaluate("document.querySelector('.skill-collision-note').textContent")).includes('global/same/SKILL.md'));
   assert.equal(await browser.evaluate("Boolean(document.querySelector('#skillEditBody'))"), true);
+  assert.equal(await browser.evaluate("[...document.querySelectorAll('#skillsDetail .skill-field>label')].filter(e=>e.textContent==='描述').length"), 0);
+  await browser.evaluate("[...document.querySelectorAll('.skill-editor-tabs button')].find(e=>e.textContent==='原始 Markdown').click()");
+  assert.equal(await browser.evaluate("[...document.querySelectorAll('#skillsDetail .skill-field>label')].filter(e=>e.textContent==='描述').length"), 1);
+  await browser.evaluate("[...document.querySelectorAll('.skill-editor-tabs button')].find(e=>e.textContent==='结构化编辑').click()");
+  assert.equal(await browser.evaluate("document.querySelector('#skillEditDescription').value"), '说明');
   await browser.evaluate("document.querySelector('[data-skill-id=same-project] [data-action=delete-skill]').click()");
   await browser.waitFor('uiDialog.open');
   assert.ok((await browser.evaluate('uiDialogMessage.textContent')).includes('project/same/SKILL.md'));

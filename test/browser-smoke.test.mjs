@@ -1,14 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { edgeAvailable, launchBrowser } from "./helpers/browser-harness.mjs";
-import { createSmokeServer } from "./helpers/smoke-server.mjs";
+import { browserScenario } from './helpers/browser-scenario.mjs';
 
 test("六条浏览器主链路使用临时数据和独立端口", { timeout: 20_000 }, async (t) => {
-  if (!edgeAvailable()) return t.skip("未安装Microsoft Edge");
-  const fixture = await createSmokeServer();
-  const browser = await launchBrowser();
-  const base = `http://127.0.0.1:${fixture.port}`;
-  t.after(async () => { await browser.close(); await fixture.close(); });
+  const scenario=await browserScenario(t);if(!scenario)return;
+  const {fixture,browser,base}=scenario;
   await browser.addInitScript(`
     // The fixture uses 2026-09-04; do not let the real clock select another day.
     const NativeDate = Date;
@@ -51,6 +47,8 @@ test("六条浏览器主链路使用临时数据和独立端口", { timeout: 20_
     await browser.waitFor("document.querySelector('#dayTasks')?.innerText.includes('已编辑事项')");
     await browser.evaluate(`document.querySelector('.task-card [data-action="delete"]').click()`);
     await browser.waitFor("!document.querySelector('#dayTasks')?.innerText.includes('已编辑事项')");
+    assert.equal(await browser.evaluate('uiDialog.open'),false);
+    assert.equal(fixture.state.tasks.length,0);
     for (const operation of ["task:create", "task:update", "task:complete", "task:move", "task:delete"]) assert.ok(fixture.state.operations.includes(operation), operation);
   });
 

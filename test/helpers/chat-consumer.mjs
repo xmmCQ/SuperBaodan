@@ -51,7 +51,8 @@ export function chatConsumer(t, home, { client, service }) {
   globalThis.requestAnimationFrame = callback => { frames.set(++id, callback); return id; };
   globalThis.cancelAnimationFrame = key => frames.delete(key);
   t.after(() => Object.assign(globalThis, old));
-  const elements = new Proxy({}, { get(target, key) { return target[key] ||= new TestNode(); } });
+  // The model popover is layout UI covered by composer-controls.test.mjs.
+  const elements = new Proxy({}, { get(target, key) { if (key === 'modelPickerButton') return null; return target[key] ||= new TestNode(); } });
   elements.chatHistoryDrawer.className = 'hidden';
   const state = { activeTools: new Map(), images: [], running: false }, fileState = { turnFiles: { involved: [], modified: [] } };
   const workspace = createWorkspaceController({ state: fileState, elements }), notices = [];

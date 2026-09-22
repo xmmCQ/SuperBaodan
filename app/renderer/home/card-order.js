@@ -20,7 +20,7 @@ export function moveOrder(keys, from, target, after) {
   next.splice(next.indexOf(target) + Number(after), 0, from); return next;
 }
 
-export function createCardOrder({ container, kind, cardSelector, getDate, keyForItem = (item) => item.id, busy = () => false, onNotice = () => {} }) {
+export function createCardOrder({ container, scrollContainer = container, kind, cardSelector, getDate, keyForItem = (item) => item.id, busy = () => false, onNotice = () => {} }) {
   let date = null, active = false, blocked = false, drag = null, frame = null, keysById = new Map(), items = [];
   const memory = new Map();
   const storageKey = () => `${CARD_ORDER_PREFIX}${kind}.${date}`;
@@ -53,9 +53,9 @@ export function createCardOrder({ container, kind, cardSelector, getDate, keyFor
   }
   function place(order, focusKey) {
     const nodes = new Map(cards().map((node) => [node.dataset.cardOrderKey, node]));
-    const top = container.scrollTop;
+    const top = scrollContainer.scrollTop;
     for (const key of order) if (nodes.has(key)) container.append(nodes.get(key));
-    container.scrollTop = top;
+    scrollContainer.scrollTop = top;
     if (focusKey) {
       nodes.get(focusKey)?.focus({ preventScroll: true });
       live.textContent = `已移动到第 ${order.indexOf(focusKey) + 1} 位`;
@@ -71,9 +71,9 @@ export function createCardOrder({ container, kind, cardSelector, getDate, keyFor
     frame = null;
     if (!drag || !drag.node.isConnected || !enabled()) { cancel(); return; }
     if (drag.y != null) {
-      const box = container.getBoundingClientRect();
-      if (drag.y < box.top + 32) container.scrollTop -= 8;
-      else if (drag.y > box.bottom - 32) container.scrollTop += 8;
+      const box = scrollContainer.getBoundingClientRect();
+      if (drag.y < box.top + 32) scrollContainer.scrollTop -= 8;
+      else if (drag.y > box.bottom - 32) scrollContainer.scrollTop += 8;
     }
     frame = requestAnimationFrame(autoscroll);
   }
@@ -111,7 +111,7 @@ export function createCardOrder({ container, kind, cardSelector, getDate, keyFor
   }
   function leave(event) {
     if (!drag) return;
-    const box = container.getBoundingClientRect();
+    const box = scrollContainer.getBoundingClientRect();
     if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) { drag.y = null; clearMarks(); }
   }
   function keydown(event) {

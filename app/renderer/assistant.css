@@ -245,6 +245,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: nowrap;
   gap: 8px;
   padding: 8px 18px;
   background: var(--ui-canvas);
@@ -495,12 +496,13 @@ textarea {
   max-width: 800px;
   margin: auto;
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
   border: 1px solid var(--line);
-  padding: 9px;
+  padding: 10px;
   border-color: #d8e5f3;
-  border-radius: 22px;
+  border-radius: 20px;
   background: rgba(255,255,255,.98);
   box-shadow: var(--ui-shadow-subtle);
 }
@@ -508,9 +510,9 @@ textarea {
 .prompt-box {
   position: relative;
   display: flex;
-  flex: 1;
+  flex: none;
   min-width: 0;
-  width: 0;
+  width: 100%;
 }
 
 .composer textarea {
@@ -518,6 +520,7 @@ textarea {
   width: 100%;
   resize: none;
   max-height: 180px;
+  min-height: 56px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -736,15 +739,15 @@ dialog::backdrop {
 }
 
 .settings-dialog {
-  width: min(1040px, calc(100vw - 48px));
-  height: min(800px, calc(100dvh - 48px));
+  width: min(920px, calc(100vw - 48px));
+  height: min(680px, calc(100dvh - 48px));
   padding: 0;
   overflow: hidden;
 }
 
 .settings-dialog>.dialog-head {
-  min-height: 64px;
-  padding: 12px 24px;
+  min-height: 60px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--color-surface);
   border-bottom-color: var(--line);
@@ -753,7 +756,7 @@ dialog::backdrop {
 .settings-tabs {
   display: flex;
   flex-wrap: wrap;
-  padding: 8px 24px;
+  padding: 8px 20px;
   border-bottom: 1px solid var(--line);
   gap: 7px;
   background: var(--color-canvas);
@@ -780,7 +783,7 @@ dialog::backdrop {
 .settings-tab {
   display: none;
   overflow: auto;
-  padding: 24px;
+  padding: 20px;
 }
 
 .settings-tab.active {

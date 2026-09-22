@@ -3,6 +3,8 @@ import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, af
 import { messageBodyText as chatMessageText } from "../core/reply-actions.js";
 import { createBootstrapLoader } from '../core/bootstrap-loader.js';
 import { cancelReadingAdjustment } from '../core/reading-position.js';
+import { createModelsController } from '../assistant/models-controller.js';
+import { bindModelPicker } from '../core/model-picker-popover.js';
 
 export function createHomeChat({
   state,
@@ -19,6 +21,17 @@ export function createHomeChat({
   closeVSkillDrawer,
   uiDialogs
 }) {
+  const modelControls = el.modelPickerButton ? createModelsController({
+    state: { models: [], enabledModels: [], currentModel: null }, elements: el, invoke,
+    command: (...args) => agentClient.command(...args), uiDialogs,
+    showNotice: message => toast(message), showError: error => toast(error.message, true),
+    updateStateFromAgent: data => modelControls.applyAgentState(data),
+    captureContext: agentClient.captureContext,
+  }) : null;
+  if (modelControls) {
+    bindModelPicker({ button: el.modelPickerButton, panel: el.modelPickerPanel, filter: el.modelFilter, render: modelControls.renderModelPicker });
+    el.thinkingSelect.addEventListener('change', modelControls.switchThinking);
+  }
   const HOME_ASSISTANT_WORKING_TEXT = "努力搬砖中！";
   const CHAT_BOTTOM_THRESHOLD = 80;
   let stickToChatBottom = true, liveCurrent = null;
@@ -78,7 +91,14 @@ async function loadAgentStatus() {
   }
 }
 
-const loadHomeChatBootstrap = createBootstrapLoader({ client: agentClient, getWorkspaceId: () => workspaceSwitcher.active()?.id, apply(data) {
+const loadHomeChatBootstrap = createBootstrapLoader({ client: agentClient, getWorkspaceId: () => workspaceSwitcher.active()?.id, async apply(data, current) {
+    if (modelControls) {
+      const enabled = await modelControls.resolveEnabledModels(data.enabledModels);
+      if (!current()) return;
+      modelControls.setEnabledModels(enabled);
+      modelControls.renderModels(data.models || [], data.state?.model);
+      modelControls.renderThinking(data.thinkingLevels || ['off'], data.state?.thinkingLevel || 'off');
+    }
     state.workspace = data.workspace || state.workspace;
     if (data.workspaces) workspaceSwitcher.sync(data.workspaces);
     if (data.workspaces?.warning && !sessionStorage.getItem("super-baodan-workspace-warning")) {
@@ -381,10 +401,12 @@ async function stopHomeChat() {
   }
 }
 
-async function openAssistantWorkspace() {
+async function openAssistantWorkspace(options = {}) {
   try {
     const data = await agentClient.launch();
-    window.location.href = data.url;
+    const target = new URL(data.url, window.location.href);
+    if (options.open === 'settings') target.searchParams.set('open', 'settings');
+    window.location.href = target.href;
   } catch (error) {
     toast(error.message, true);
   }
@@ -433,8 +455,8 @@ function showHomeAssistantWorking() {
 function setChatControls(busy) {
   setAgentStatus(busy ? "正在处理……" : "", "ready");
   el.sendButton.disabled = false;
-  el.sendButton.classList.toggle("icon-primary", !busy);
-  el.sendButton.classList.toggle("icon-danger", busy);
+  el.sendButton.classList.add("icon-primary");
+  el.sendButton.classList.remove("icon-danger");
   const actionLabel = busy ? "停止回复" : "发送";
   const actionIcon = busy ? "square-stop" : "arrow-up";
   el.sendButton.setAttribute("aria-label", actionLabel);

@@ -1,3 +1,5 @@
+import { fault } from '../../shared/errors.js';
+
 export function sessionState(session) {
   return {
     model: session.model,
@@ -33,9 +35,13 @@ export async function dispatchSdkCommand(runtime, session, command) {
     case "get_available_models": return { models: session.modelRuntime.getAvailableSnapshot() };
     case "get_available_thinking_levels": return { levels: session.getAvailableThinkingLevels() };
     case "set_model": {
+      if (!command.sessionId || command.sessionId !== session.sessionId) {
+        throw fault(409, '对话已切换，请在当前对话重新选择模型');
+      }
       const model = session.modelRuntime.getAvailableSnapshot().find((item) => item.provider === command.provider && item.id === command.modelId);
       if (!model) throw new Error(`Model not found: ${command.provider}/${command.modelId}`);
-      await session.setModel(model);
+      // SDK appends model_change to this conversation; defaults belong only to Settings.
+      await session.setModel(model, { persist: false });
       return model;
     }
     case "set_thinking_level": session.setThinkingLevel(command.level); return null;

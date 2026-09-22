@@ -8,7 +8,8 @@ export function createModelsController({
   showError,
   showSettingsToast,
   loadBootstrap,
-  updateStateFromAgent
+  updateStateFromAgent,
+  captureContext = () => () => true
 }) {
   let availableModels = [];
   const validModel = (model) => Boolean(model?.provider && model?.id && model.provider !== "unknown" && model.id !== "unknown");
@@ -27,20 +28,23 @@ async function resolveEnabledModels(bootstrapEnabledModels) {
 
 async function switchModel(provider, modelId) {
   if (!provider || !modelId) return;
+  const current = captureContext();
   el.modelPickerPanel.classList.add("hidden");
   try {
     await command({ type: "set_model", provider, modelId });
+    if (!current()) return;
     const [agentState, thinking] = await Promise.all([
       command({ type: "get_state" }),
       command({ type: "get_available_thinking_levels" }),
     ]);
+    if (!current()) return;
     state.currentModel = { provider, id: modelId };
     updateStateFromAgent(agentState || {});
     renderThinking(thinking?.levels || ["off"], agentState?.thinkingLevel || "off");
     renderModelPicker();
     updateModelPickerButton();
     showNotice(`已切换模型：${modelId}`);
-  } catch (error) { showError(error); }
+  } catch (error) { if (current() && !error.staleResponse) showError(error); }
 }
 
 async function switchThinking() {
@@ -86,7 +90,7 @@ function renderModelPicker() {
       heading.textContent = provider === "openai-codex" ? "ChatGPT Plus/Pro · openai-codex" : provider;
       el.modelPickerList.append(heading);
     }
-    const button = document.createElement("button");
+    const button = document.createElement("button"); button.type = 'button';
     button.className = `model-option ${state.currentModel?.provider === model.provider && state.currentModel?.id === model.id ? "active" : ""}`;
     const name = document.createElement("b"); name.textContent = model.name || model.id;
     const id = document.createElement("small"); id.textContent = model.id;
@@ -107,7 +111,8 @@ function updateModelPickerButton() {
   el.thinkingSelect.classList.toggle("hidden", !hasModels || !selected);
   if (!hasModels) el.modelPickerPanel.classList.add("hidden");
   const display = current || selected;
-  el.modelPickerButton.textContent = display ? `${display.name || display.id} · ${display.provider}` : "选择模型";
+  el.modelPickerButton.textContent = display ? display.name || display.id : "选择模型";
+  el.modelPickerButton.title = display ? `${display.name || display.id} · ${display.provider}` : "选择模型";
 }
 
 function renderThinking(levels, current) {

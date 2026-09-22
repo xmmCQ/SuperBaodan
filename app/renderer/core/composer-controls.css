@@ -1,0 +1,18 @@
+/* Shared structure, inherited page colors. No whole-page scaling. */
+.composer-controls { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+.composer-controls .model-picker { position: relative; flex: 0 1 auto; width: max-content; min-width: 0; max-width: 280px; }
+.composer-controls .model-picker-button { display: block; width: max-content; min-width: 0; max-width: 100%; height: 36px; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--ui-border); border-radius: 9999px; background: var(--ui-canvas); color: var(--ui-text); font: inherit; font-size: 14px; cursor: pointer; }
+.composer-controls #thinkingSelect { flex: 0 1 92px; width: 92px; min-width: 70px; height: 36px; min-height: 36px; padding: 0 8px; border: 1px solid var(--ui-border); border-radius: 9999px; color: var(--ui-text); background: var(--ui-canvas); font: inherit; font-size: 14px; }
+.composer-controls #sendButton { margin-left: auto; }
+.composer-controls #stopButton:not(.hidden) { margin-left: auto; }
+.composer-controls #stopButton:not(.hidden) + #sendButton { margin-left: 0; }
+.model-picker-panel[popover] { position: fixed; inset: auto; margin: 0; box-sizing: border-box; padding: 10px; border: 1px solid var(--ui-border); border-radius: 16px; background: var(--ui-canvas); color: var(--ui-text); box-shadow: var(--ui-shadow-modal); overflow: hidden; }
+.model-picker-panel[popover]:popover-open { display: flex; flex-direction: column; gap: 8px; }
+.model-picker-panel[popover] input { box-sizing: border-box; flex: none; width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--ui-control-border); border-radius: 8px; font: inherit; font-size: 14px; }
+.model-picker-panel[popover] .model-picker-list { min-height: 0; max-height: none; overflow: auto; margin: 0; }
+.model-picker-panel[popover] .model-group-title { padding: 8px; font-size: 12px; color: var(--ui-secondary); }
+.model-picker-panel[popover] .model-option { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; height: auto; min-height: 44px; margin: 0; padding: 8px; text-align: left; border: 1px solid transparent; border-radius: 8px; color: var(--ui-text); background: transparent; cursor: pointer; }
+.model-picker-panel[popover] .model-option b { font-size: 14px; overflow-wrap: anywhere; }
+.model-picker-panel[popover] .model-option small { font-size: 12px; color: var(--ui-secondary); overflow-wrap: anywhere; }
+.model-picker-panel[popover] .model-option:is(:hover,.active) { background: var(--green-soft, var(--assistant-selected)); border-color: var(--green, var(--assistant-selected-border)); }
+.model-picker-panel[popover] :focus-visible { outline: 2px solid var(--green, var(--ui-focus)); outline-offset: -2px; }

@@ -39,7 +39,8 @@ html:root body [data-glass-surface] :is(.dialog-head,.ui-dialog-head,.workspace-
 html:root body [data-glass-surface] :is(.settings-tabs,.ui-dialog-editor-pane-label,.wd-toolbar,.wd-footer) { background: transparent; }
 html:root body [data-glass-surface] :is(.ui-dialog-editor-split,.ui-dialog-editor-pane,.ui-dialog-editor-preview,.config-card,.skills-layout,.skills-sidebar,.skills-detail,.provider-card,.provider-more,.daily-record-preview) { background-color: #fff; }
 html:root body [data-glass-surface] :is(input:not([type=checkbox]):not([type=radio]),textarea,select) { background-color: #fff; }
-html:root body [data-glass-surface] .task-card { background: #fff; }
+/* Long-term cards share the day-list background and hover states. */
+html:root body [data-glass-surface] .task-card:not(#longtermTasks .task-card) { background: #fff; }
 #taskSummaryDialog .task-summary-body { background: transparent; }
 #taskSummaryDialog #taskSummaryNotice { color: #334155; }
 @media (forced-colors: active) {

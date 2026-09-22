@@ -128,7 +128,15 @@ export function createAgentClient({
   }
 
   async function command(payload, options = {}) {
-    const result = await request("agent.command", { ...(workspacePayload(payload, getWorkspaceId())) }, { timeout: payload.type.startsWith("get_") ? 15000 : 0, ...options });
+    const modelChange = payload.type === 'set_model';
+    const sessionId = runtime.sessionId;
+    const current = modelChange ? captureContext() : null;
+    if (modelChange && (!sessionId || !current())) {
+      throw new ApplicationError('对话尚未就绪，请稍后选择模型', { status: 409 });
+    }
+    const scoped = modelChange ? { ...payload, sessionId } : payload;
+    const result = await request("agent.command", { ...(workspacePayload(scoped, getWorkspaceId())) }, { timeout: payload.type.startsWith("get_") ? 15000 : 0, ...options });
+    if (modelChange && (!current() || runtime.sessionId !== sessionId)) throw staleResponse();
     return result.data;
   }
 

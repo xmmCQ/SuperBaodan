@@ -1,0 +1,32 @@
+/* Loaded only inside the home settings shadow root. */
+:is(#settingsDialog, #secretDialog, #uiDialog) button {
+  --ui-primary: #17181b;
+  --ui-primary-hover: #2a2a2a;
+  --assistant-primary-active: #0a0a0a;
+  --ui-text: #17181b;
+  --ui-link: #17181b;
+  --ui-focus: #17181b;
+  --accent2: #17181b;
+  --accent-soft: #f3f4f6;
+  --accent-pale: #f3f4f6;
+  --assistant-selected: #f3f4f6;
+}
+:is(#settingsDialog, #secretDialog, #uiDialog) button:where(:not(.danger, .danger-lite, .primary, .project-prompt-save, #uiDialogConfirm)) {
+  color: #17181b;
+  border-color: #e2e5e9;
+}
+:is(#settingsDialog, #secretDialog, #uiDialog) button:where(:not(.danger, .danger-lite, .primary, .project-prompt-save, #uiDialogConfirm)):hover {
+  color: #17181b;
+  border-color: #c8cdd3;
+  background: #f3f4f6;
+}
+#settingsDialog :is(.settings-tabs, .skill-editor-tabs) button.active {
+  color: #fff;
+  background: #17181b;
+  border-color: #17181b;
+}
+:is(#settingsDialog, #secretDialog) .primary:hover {
+  color: #fff;
+  border-color: #2a2a2a;
+  background: #2a2a2a;
+}

@@ -18,8 +18,8 @@ export function createSettingsDialog({ elements: el, closeActiveLogin, loadAccou
   async function activateTab(name) {
     if (name !== currentTab && currentTab === 'projectPrompt' && !await canLeaveProjectPrompt()) return;
     currentTab = name;
-    for (const button of document.querySelectorAll("[data-settings-tab]")) button.classList.toggle("active", button.dataset.settingsTab === name);
-    for (const tab of document.querySelectorAll(".settings-tab")) tab.classList.remove("active");
+    for (const button of el.settingsDialog.querySelectorAll("[data-settings-tab]")) button.classList.toggle("active", button.dataset.settingsTab === name);
+    for (const tab of el.settingsDialog.querySelectorAll(".settings-tab")) tab.classList.remove("active");
     el[`${name}Tab`].classList.add("active");
     try {
       if (name === "accounts") await loadAccounts();

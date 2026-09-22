@@ -119,7 +119,8 @@ function renderSkillDetail() {
     toggle.append(checkbox, text); controls.append(toggle); heading.append(controls);
   }
   el.skillsDetail.append(heading);
-  appendSkillField("描述", skill.description || "无", el.skillsDetail);
+  // The structured editor already presents the editable description.
+  if (skill.install || !skill.writable || state.skillEditorRaw) appendSkillField("描述", skill.description || "无", el.skillsDetail);
   appendSkillField("路径", skill.filePath, el.skillsDetail, "code");
   appendSkillField("来源", skill.source || skill.scope, el.skillsDetail);
   if (skill.collision) {
@@ -178,10 +179,9 @@ function renderCustomSkillEditor(skill) {
   if (state.skillEditorRaw) {
     form.append(createExpandableSkillField({ label: "SKILL.md", editorTitle: "编辑完整 SKILL.md", id: "skillRawContent", value: skill.content || "", className: "skill-raw-editor", monospace: true, spellcheck: false, saveLabel: "保存 Skill", markdownPreview: true, stripFrontmatter: true }));
   } else {
-    const name = document.createElement("label"); name.textContent = "名称（创建后不可修改）"; const input = document.createElement("input"); input.value = skill.name; input.disabled = true; name.append(input);
-    const description = createExpandableSkillField({ label: "描述", editorTitle: "编辑描述", id: "skillEditDescription", value: skill.description || "", rows: 3, saveLabel: "保存 Skill" });
+    const description = createExpandableSkillField({ label: "描述", editorTitle: "编辑描述", id: "skillEditDescription", value: skill.description || "", rows: 2, saveLabel: "保存 Skill" });
     const body = createExpandableSkillField({ label: "指令正文", editorTitle: "编辑指令正文", id: "skillEditBody", value: skill.body || "", className: "skill-body-editor", monospace: true, spellcheck: false, saveLabel: "保存 Skill", markdownPreview: true });
-    form.append(name, description, body);
+    form.append(description, body);
   }
   const actions = document.createElement('div'); actions.className = 'skill-heading-actions';
   const save = skillButton("保存 Skill", () => saveCustomSkill(skill), "primary"); save.disabled = state.skillBusy;

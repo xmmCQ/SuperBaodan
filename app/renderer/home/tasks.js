@@ -21,6 +21,7 @@ export function createTasks({
   const loadDashboard = (...args) => loadDashboardCallback(...args);
   const loadDay = (...args) => loadDayCallback(...args);
   const order = createCardOrder({ container: el.dayTasks, kind: 'tasks', cardSelector: '.task-card', getDate: () => state.selectedDate, keyForItem: taskOrderKey, busy: () => state.taskSaving, onNotice: toast });
+  const longtermOrder = createCardOrder({ container: el.longtermTasks, scrollContainer: el.taskSummaryBody, kind: 'longterm', cardSelector: '.task-card', getDate: () => 'all', keyForItem: taskOrderKey, busy: () => state.taskSaving || !el.taskSummaryDialog.open, onNotice: toast });
 function renderOverdue(tasks) {
   summary.update('overdue', tasks.length);
   renderTaskList(el.overdueTasks, tasks, "暂无遗留工作", "✓", (task) => `
@@ -38,7 +39,8 @@ function renderLongTerm(tasks) {
 }
 
 function renderTaskList(container, tasks, emptyText, emptyIcon, metaBuilder, allowDelete = false) {
-  if (container === el.dayTasks) tasks = order.prepare(tasks);
+  const cardOrder = container === el.dayTasks ? order : container === el.longtermTasks ? longtermOrder : null;
+  if (cardOrder) tasks = cardOrder.prepare(tasks);
   rememberTasks(tasks);
   if (!tasks.length) {
     container.innerHTML = emptyState(emptyText, emptyIcon);
@@ -49,28 +51,32 @@ function renderTaskList(container, tasks, emptyText, emptyIcon, metaBuilder, all
     const moveAttributes = moveKind
       ? `draggable="true" data-move-kind="${moveKind}" data-move-date="${state.selectedDate}" data-tooltip="拖到列表中调整顺序，拖到日历日期可改期"`
       : "";
+    const compact = container === el.dayTasks;
+    const actions = `<div class="task-card-actions">
+      <button class="task-edit${compact ? ' icon-action icon-action--compact' : ''}" data-action="edit" type="button" aria-label="编辑事项" data-tooltip="编辑事项">${compact ? '<svg aria-hidden="true"><use href="/icons.svg#pencil"></use></svg>' : '编辑'}</button>
+      ${(container !== el.overdueTasks && (allowDelete || container === el.longtermTasks)) ? `<button class="task-delete${compact ? ' icon-action icon-action--compact icon-danger' : ''}" data-action="delete" type="button" aria-label="删除事项" data-tooltip="删除事项">${compact ? '<svg aria-hidden="true"><use href="/icons.svg#trash-2"></use></svg>' : '删除'}</button>` : ''}
+    </div>`;
     return `
       <div class="task-card ${task.checked ? "completed" : ""} ${moveKind ? "task-draggable tooltip-control" : ""}" data-task-id="${task.id}" ${moveAttributes}>
         <button class="task-check tooltip-control tooltip-down" data-action="toggle" type="button" aria-label="${task.checked ? "取消完成" : "标记完成"}" data-tooltip="${task.checked ? "取消完成" : "标记完成"}">${task.checked ? "✓" : ""}</button>
         <div class="task-card-content">
-          <div class="task-card-title">${escapeHtml(task.text)}</div>
+          ${compact ? '<div class="task-card-heading">' : ''}<div class="task-card-title">${escapeHtml(task.text)}</div>${compact ? `${actions}</div>` : ''}
           <div class="task-meta">${metaBuilder(task)}</div>
         </div>
-        <div class="task-card-actions">
-          <button class="task-edit" data-action="edit" type="button" aria-label="编辑事项">编辑</button>
-          ${(container !== el.overdueTasks && (allowDelete || container === el.longtermTasks)) ? '<button class="task-delete" data-action="delete" type="button" aria-label="删除事项">删除</button>' : ""}
-        </div>
+        ${compact ? '' : actions}
       </div>`;
   }).join("");
-  if (container === el.dayTasks) order.decorate(tasks);
+  if (cardOrder) cardOrder.decorate(tasks);
 }
 
 function dayTaskMeta(task) {
+  const { plannedDate, dueDate } = taskDates(task), longterm = taskKind(task) === 'longterm';
+  const dates = { planned: plannedDate, due: dueDate, completed: task.completedDate };
+  const labels = { ...roleLabels, planned: longterm ? '起始' : '计划', due: longterm ? '终止' : '截止' };
   return `
-    ${task.roles.map((role) => `<span class="badge ${role}">${taskKind(task) === 'longterm' && role === 'planned' ? '起始' : taskKind(task) === 'longterm' && role === 'due' ? '终止' : roleLabels[role]}</span>`).join("")}
+    ${task.roles.filter(role => !dates[role]).map(role => `<span class="badge ${role}">${labels[role]}</span>`).join('')}
     ${task.conflict ? '<span class="badge conflict">状态冲突</span>' : ""}
-    ${dateMeta(task)}
-    ${task.completedDate ? `<span>✅ ${task.completedDate}</span>` : ""}
+    ${Object.entries(dates).filter(([,date]) => date).map(([role,date]) => `<span class="task-date-item"><span class="badge ${role}">${labels[role]}</span> ${escapeHtml(date)}</span>`).join('')}
     ${task.recurrence ? `<span>🔁 ${recurrenceLabels[task.recurrence] || task.recurrence}</span>` : ""}
     ${sectionMeta(task)}`;
 }
@@ -320,7 +326,7 @@ async function saveTaskForm(event) {
     const data = await invoke((editing ? "tasks.update" : "tasks.create"), { id: state.editingTaskId, ...(body) });
     committed = true;
     state.sourceRevision = data.updatedAt;
-    if (editing) { const previous = state.taskById.get(state.editingTaskId); if (previous) order.rename(previous, { ...previous, editableText: body.text }); }
+    if (editing) { const previous = state.taskById.get(state.editingTaskId); if (previous) { const next = { ...previous, editableText: body.text }; order.rename(previous, next); longtermOrder.rename(previous, next); } }
     state.taskById.clear();
     hideTaskModal(false);
     await refreshTaskViews(true);

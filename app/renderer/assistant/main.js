@@ -9,22 +9,17 @@ import { createAgentEventStream } from "/core/event-stream.js?v=1";
 import { createSessionService } from "/core/session-service.js?v=1";
 import { createAssistantState } from "/assistant/state.js?v=1";
 import { createChatView } from "/assistant/chat-view.js?v=4";
-import { createReadingSettings } from "/core/reading-settings.js";
 import { createReplyActions } from "/core/reply-actions.js";
 import { createConversationDirectory } from "/core/conversation-directory.js";
 import { createExecutionProcess } from "/core/execution-process.js";
 import { createSessionsView } from "/assistant/sessions-view.js?v=3";
-import { createModelsController } from "/assistant/models-controller.js?v=1";
-import { createAuthController } from "/assistant/auth-controller.js?v=4";
-import { createSkillsController } from "/assistant/skills-controller.js?v=1";
+import { createSettingsPanel } from './settings-panel.js';
 import { createWorkspaceController } from "/assistant/workspace-controller.js?v=2";
-import { createSettingsDialog } from "/assistant/settings-dialog.js?v=1";
-import { createProjectPrompt } from './project-prompt.js';
 import { createBootstrapLoader } from '../core/bootstrap-loader.js';
+import { bindModelPicker } from '../core/model-picker-popover.js';
 
 const state = createAssistantState();
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
-createReadingSettings({ mount: el.readingTab, container: el.messages, onNotice: showNotice });
 const uiDialogs = createUiDialogController({
   dialog: el.uiDialog, form: el.uiDialogForm, title: el.uiDialogTitle,
   message: el.uiDialogMessage, field: el.uiDialogField,
@@ -34,8 +29,6 @@ const uiDialogs = createUiDialogController({
 let chat;
 let sessions;
 let models;
-let auth;
-let skills;
 let settings;
 let workspace;
 let projectPrompt;
@@ -88,30 +81,12 @@ sessions = createSessionsView({
   state: state.sessions, elements: el, sessionService, uiDialogs, setIconBusy,
   getRunning: chat.isRunning, getWorkspaceId: () => workspace.workspace()?.id, loadBootstrap, showNotice, showError,
 });
-models = createModelsController({
-  state: state.models, elements: el, invoke, command, uiDialogs,
-  showNotice, showError, showSettingsToast, loadBootstrap, updateStateFromAgent,
-});
-auth = createAuthController({
-  state: state.auth, elements: el, invoke, uiDialogs, showNotice, showError, showSettingsToast,
-  loadBootstrap, loadModelCatalog: models.loadModelCatalog,
-});
-skills = createSkillsController({
-  state: state.skills, elements: el, invoke, uiDialogs, renderMarkdown, markdownBodyWithoutFrontmatter,
-  showNotice, showError, showSettingsToast, getWorkspaceId: currentWorkspaceId,
-});
-projectPrompt = createProjectPrompt({ mount: el.projectPromptTab, invoke, getWorkspace: () => workspace?.workspace(), uiDialogs });
-settings = createSettingsDialog({
-  elements: el,
-  closeActiveLogin: auth.closeActiveLogin,
-  loadAccounts: auth.loadAccounts,
-  loadModelsConfig: () => state.models.modelsConfig ? undefined : models.loadModelsConfig(),
-  loadModelCatalog: models.loadModelCatalog,
-  loadSkills: skills.loadSkills,
-  loadProjectPrompt: projectPrompt.load,
-  canLeaveProjectPrompt: projectPrompt.canLeave,
-  showError,
-});
+({ models, projectPrompt, settings } = createSettingsPanel({
+  state, elements: el, invoke, command, uiDialogs, showNotice, showError,
+  loadBootstrap, updateStateFromAgent, renderMarkdown, markdownBodyWithoutFrontmatter,
+  getWorkspace: () => workspace?.workspace(), readingContainer: el.messages,
+  captureContext: agentClient.captureContext,
+}));
 
 const agentEvents = createAgentEventStream({
   captureContext: () => agentClient.captureContext({ allowTransition: true }),
@@ -129,7 +104,14 @@ void start();
 async function start() {
   bindEvents();
   agentEvents.connect();
+  const entryUrl = new URL(window.location.href);
+  const openSettings = entryUrl.searchParams.get('open') === 'settings';
+  if (openSettings) {
+    entryUrl.searchParams.delete('open');
+    history.replaceState(history.state, '', entryUrl.href);
+  }
   await loadBootstrap();
+  if (openSettings) el.settingsButton.click();
   const pending = sessionStorage.getItem("super-baodan-pending-prompt");
   if (!pending) return;
   sessionStorage.removeItem("super-baodan-pending-prompt");
@@ -143,36 +125,8 @@ function bindEvents() {
   el.newSession.addEventListener("click", sessions.newSession);
   el.refreshSessions.addEventListener("click", sessions.refreshSessions);
   el.compactButton.addEventListener("click", chat.compactSession);
-  el.modelPickerButton.addEventListener("click", (event) => { event.stopPropagation(); el.modelPickerPanel.classList.toggle("hidden"); if (!el.modelPickerPanel.classList.contains("hidden")) el.modelFilter.focus(); });
-  el.modelFilter.addEventListener("input", models.renderModelPicker);
-  document.addEventListener("click", (event) => { if (!event.target.closest(".model-picker")) el.modelPickerPanel.classList.add("hidden"); });
+  bindModelPicker({ button: el.modelPickerButton, panel: el.modelPickerPanel, filter: el.modelFilter, render: models.renderModelPicker });
   el.settingsButton.addEventListener("click", settings.open);
-  el.closeSettings.addEventListener("click", settings.close);
-  for (const tab of document.querySelectorAll("[data-settings-tab]")) tab.addEventListener("click", () => settings.activateTab(tab.dataset.settingsTab));
-  el.providerConfigSelect.addEventListener("change", models.changeProviderConfig);
-  el.modelConfigSelect.addEventListener("change", models.changeModelConfig);
-  el.addProvider.addEventListener("click", models.addProviderConfig);
-  el.deleteProvider.addEventListener("click", models.deleteProviderConfig);
-  el.addModel.addEventListener("click", models.addModelConfig);
-  el.duplicateModel.addEventListener("click", models.duplicateModelConfig);
-  el.deleteModel.addEventListener("click", models.deleteModelConfig);
-  el.reloadModelsConfig.addEventListener("click", models.loadModelsConfig);
-  el.saveModelsConfig.addEventListener("click", models.saveModelsConfig);
-  el.testModel.addEventListener("click", models.testConfiguredModel);
-  el.defaultModelSelect.addEventListener("change", () => models.syncDefaultModelPreference());
-  el.selectAllModels.addEventListener("click", () => models.updateModelVisibility("all"));
-  el.invertModels.addEventListener("click", () => models.updateModelVisibility("invert"));
-  el.savePreferences.addEventListener("click", models.saveModelPreferences);
-  el.addSkillButton.addEventListener("click", () => {
-    Object.assign(state.skills, { skillAdding: true, skillAddMode: "market", skillMarketQuery: "", skillSearchResults: [] });
-    skills.renderSkillDetail();
-  });
-  el.refreshSkills.addEventListener("click", () => skills.loadSkills());
-  el.checkAllSkillUpdates.addEventListener("click", () => skills.checkSkillUpdates());
-  el.skillsFilter.addEventListener("input", skills.renderSkillsList);
-  el.closeSecret.addEventListener("click", auth.cancelSecretInput);
-  el.cancelSecret.addEventListener("click", auth.cancelSecretInput);
-  el.submitSecret.addEventListener("click", auth.submitSecretInput);
   el.thinkingSelect.addEventListener("change", models.switchThinking);
   el.attachButton.addEventListener("click", () => el.imageInput.click());
   el.imageInput.addEventListener("change", chat.addImages);
@@ -281,7 +235,6 @@ async function refreshStateAndSessions() {
   } catch (error) { if (!error.staleResponse) console.warn(error); }
 }
 
-function showSettingsToast(message, type = "success") { settings?.toast(message, type); }
 function showNotice(message, error = false) {
   if (!message) return;
   clearTimeout(noticeTimer); el.notice.textContent = message; el.notice.style.background = error ? "#9f3535" : "#3a332c"; el.notice.classList.remove("hidden");

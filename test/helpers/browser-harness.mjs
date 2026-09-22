@@ -57,7 +57,9 @@ export async function launchBrowser({ width, height } = {}) {
     await connection.command("Network.enable");
     await connection.command('Page.addScriptToEvaluateOnNewDocument', { source: `
       const operations = ${JSON.stringify(FIXTURE_OPERATIONS)};
-      const pending = new Map();
+      const pending = new Map(), eventSources = new Set();
+      window.__closeFixtureEvents = () => { for (const source of eventSources) source.close(); eventSources.clear(); };
+      window.addEventListener('pagehide', window.__closeFixtureEvents);
       window.workbench = {
         async invoke(id, name, args = {}) {
           if (name === 'agent.connect') return { ok: true, value: [] };
@@ -74,7 +76,7 @@ export async function launchBrowser({ width, height } = {}) {
           finally { pending.delete(id); }
         },
         cancel: id => pending.get(id)?.abort(),
-        onEvent(listener) { const source = new EventSource('/api/agent/events'); source.onmessage = e => listener({ topic: 'agent', event: JSON.parse(e.data) }); return () => source.close(); },
+        onEvent(listener) { const source = new EventSource('/api/agent/events'); eventSources.add(source); source.onmessage = e => listener({ topic: 'agent', event: JSON.parse(e.data) }); return () => { source.close(); eventSources.delete(source); }; },
         onBackendStatus() { return () => {}; },
         openExternal: async () => ({}),
       };
@@ -90,6 +92,9 @@ export async function launchBrowser({ width, height } = {}) {
     issues: connection.issues,
     addInitScript: (source) => connection.command("Page.addScriptToEvaluateOnNewDocument", { source }),
     async navigate(url) {
+      // Reusing a profile must not retain the previous document's fixture SSE
+      // connections (BFCache can otherwise exhaust the per-origin HTTP pool).
+      await connection.evaluate('window.__closeFixtureEvents?.()');
       connection.issues.length = 0;
       const before = connection.navigationVersion();
       const result = await connection.command("Page.navigate", { url });

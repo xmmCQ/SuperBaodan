@@ -56,9 +56,8 @@ export function createWorkDocuments({ trigger, invoke, uiDialogs }) {
   async function saveOrder(kind, from, to, after) {
     if (!sortEnabled()) return;
     const next = clone();
-    const populated = new Set(data.documents.map(doc => doc.categoryId));
     const predicate = kind === 'categories'
-      ? category => category.id !== UNCATEGORIZED && populated.has(category.id)
+      ? category => category.id !== UNCATEGORIZED
       : doc => selected === 'all' || doc.categoryId === selected;
     if (!reorderDocumentSlots(next[kind], from, to, after, predicate)) return;
     const container = kind === 'categories' ? categories : list;
@@ -111,11 +110,11 @@ export function createWorkDocuments({ trigger, invoke, uiDialogs }) {
     const visibleCategories = [
       ...data.categories.filter(c => c.id !== UNCATEGORIZED),
       ...data.categories.filter(c => c.id === UNCATEGORIZED),
-    ].filter(c => counts.get(c.id) > 0);
+    ];
     if (selected !== 'all' && !visibleCategories.some(c => c.id === selected)) selected = 'all';
     for (const category of [{ id: 'all', name: '全部' }, ...visibleCategories]) {
       const row = node('div', '', 'wd-category');
-      const count = category.id === 'all' ? data.documents.length : counts.get(category.id);
+      const count = category.id === 'all' ? data.documents.length : (counts.get(category.id) || 0);
       const choose = button(`${category.name} · ${count}`, () => { if (busy) return; selected = category.id; search.value = ''; list.scrollTop = 0; render(); }, category.id === selected ? 'active' : ''); choose.disabled = busy;
       if (![UNCATEGORIZED, 'all'].includes(category.id)) {
         row.dataset.sortId = category.id;
@@ -168,8 +167,13 @@ export function createWorkDocuments({ trigger, invoke, uiDialogs }) {
       save: async name => {
         const next = clone();
         if (category) { const found = next.categories.find(c => c.id === category.id); if (!found) throw new Error('分类已删除，请关闭后重新添加'); found.name = name; }
-        else next.categories.push({ id: crypto.randomUUID(), name });
+        const newId = category ? null : crypto.randomUUID();
+        if (newId) next.categories.push({ id: newId, name });
         await commit(next);
+        if (newId) {
+          selected = newId; search.value = ''; list.scrollTop = 0; render();
+          categories.querySelector(`[data-sort-id="${newId}"]`)?.scrollIntoView({ block: 'nearest' });
+        }
       } });
   }
   function editDocument(doc) {

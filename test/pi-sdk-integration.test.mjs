@@ -87,7 +87,7 @@ export default function(pi) {
     assert.ok(runtime.host.session.agent.state.systemPrompt.includes('PROJECT_PROMPT_LIVE_MARKER'));
     const commands = await runtime.send({ type: "get_commands" });
     assert.ok(commands.commands.some((item) => item.name === "sdk-check"));
-    await runtime.send({ type: "set_model", provider: "fixture", modelId: "fixture" });
+    await runtime.send({ type: "set_model", sessionId: sameSession.sessionId, provider: "fixture", modelId: "fixture" });
     await runtime.send({ type: "set_thinking_level", level: "off" });
     assert.ok((await runtime.send({ type: "get_available_thinking_levels" })).levels.includes("off"));
     await runtime.send({ type: "prompt", message: "/sdk-check" });

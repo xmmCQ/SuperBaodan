@@ -1,22 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { createSmokeServer } from './helpers/smoke-server.mjs';
-import { launchBrowser, edgeAvailable } from './helpers/browser-harness.mjs';
+import { browserScenario } from './helpers/browser-scenario.mjs';
 
 const luminance = rgb => rgb.map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
 const contrast = (a, b) => { const x = luminance(a.match(/[\d.]+/g).slice(0,3).map(Number)), y = luminance(b.match(/[\d.]+/g).slice(0,3).map(Number)); return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); };
 
 test('助手蓝色主题隔离、共享弹窗和代表性对比度', { timeout: 40000 }, async t => {
-  assert.ok(edgeAvailable(), '需要现有 Edge，不安装依赖');
-  const fixture = await createSmokeServer(); let browser;
-  t.after(async () => { try { await browser?.close(); } finally { await fixture.close(); } });
-  browser = await launchBrowser(); await browser.setViewport(1440,900);
-  const base = `http://127.0.0.1:${fixture.port}`;
-  const output = new URL('../docs/screenshots/assistant-theme/', import.meta.url);
-  await mkdir(output, { recursive: true });
+  const scenario = await browserScenario(t); if (!scenario) return;
+  const { browser, base, shot } = scenario;
   const style = (selector, prop = 'backgroundColor') => browser.evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector)}))[${JSON.stringify(prop)}]`);
-  const shot = async name => { await browser.evaluate('document.fonts.ready'); await writeFile(new URL(name + '.png', output), await browser.screenshot()); };
   const dialog = async expected => {
     // Present the existing shared dialog directly: no delete/login or real data operations.
     await browser.evaluate("uiDialogTitle.textContent='主题确认';uiDialogMessage.textContent='仅验证界面配色，不执行任何操作。';uiDialogConfirm.classList.remove('danger');uiDialog.showModal()");
@@ -27,6 +19,9 @@ test('助手蓝色主题隔离、共享弹窗和代表性对比度', { timeout: 
   await browser.waitFor("document.querySelector('#chatMessages > .message')");
   assert.equal(await style('.icon-action.icon-primary'), 'rgb(23, 25, 28)');
   await dialog('rgb(10, 10, 10)');
+  assert.equal(await style('#chatMessages .message.assistant'),'rgb(255, 255, 255)');
+  assert.equal(await style('#chatMessages .message.assistant','borderTopWidth'),'1px');
+  assert.notEqual(await style('#chatMessages .message.assistant','boxShadow'),'none');
   await shot('home');
 
   await browser.navigate(base+'/assistant.html');
@@ -61,7 +56,9 @@ test('助手蓝色主题隔离、共享弹窗和代表性对比度', { timeout: 
   await browser.waitFor("getComputedStyle(document.querySelector('.settings-tabs button.active')).backgroundColor==='rgb(234, 242, 255)'");
   assert.equal(await style('.settings-tabs button.active'),selected);
   assert.equal(await style('.settings-tabs button.active','color'),'rgb(29, 78, 216)');
-  assert.equal(await style('.project-prompt-save'),blue);
+  // Settings use the darker blue accent, independently of the send button.
+  const settingsBlue='rgb(29, 78, 216)';
+  assert.equal(await style('.project-prompt-save'),settingsBlue);
+  assert.ok(contrast(await style('.project-prompt-save','color'),settingsBlue)>=4.5);
   await shot('settings');
-  t.diagnostic('截图：docs/screenshots/assistant-theme/{home,assistant,settings}.png');
 });

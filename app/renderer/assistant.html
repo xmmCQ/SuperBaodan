@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="/assistant/project-prompt.css?v=blue1">
   <link rel="stylesheet" href="/core/glass-surfaces.css?v=ui1">
   <link rel="stylesheet" href="/assistant/settings-density.css?v=ui1">
+  <link rel="stylesheet" href="/core/composer-controls.css?v=1">
 </head>
 <body class="assistant-page">
   <div class="assistant-shell workspace-closed">
@@ -47,14 +48,8 @@
     <main class="chat-main">
       <header class="toolbar">
         <div class="runtime-state" role="status" aria-live="polite"><i id="runtimeDot" aria-hidden="true"></i><span id="runtimeText">正在准备对话……</span></div>
-        <div class="model-picker hidden">
-          <button id="modelPickerButton" class="model-picker-button">读取模型……</button>
-          <div id="modelPickerPanel" class="model-picker-panel hidden">
-            <input id="modelFilter" type="search" placeholder="搜索模型名称或ID" autocomplete="off">
-            <div id="modelPickerList" class="model-picker-list"></div>
-          </div>
-        </div>
-        <select id="thinkingSelect" class="hidden" aria-label="思考等级"><option value="off">off</option></select>
+        <button id="directoryButton" class="icon-action tooltip-down" type="button" aria-label="展开对话目录" data-tooltip="对话目录"><svg aria-hidden="true"><use href="/icons.svg?v=6#list-tree"></use></svg></button>
+        <button id="compactButton" class="icon-action tooltip-down" type="button" aria-label="压缩上下文" data-tooltip="压缩上下文"><svg aria-hidden="true"><use href="/icons.svg#minimize-2"></use></svg></button>
         <button id="settingsButton" class="icon-action tooltip-down" type="button" aria-label="设置" data-tooltip="设置"><svg aria-hidden="true"><use href="/icons.svg#settings"></use></svg></button>
         <button id="showWorkspace" class="icon-action tooltip-down" type="button" aria-label="显示或折叠文件工作区" data-tooltip="文件工作区"><svg aria-hidden="true"><use href="/icons.svg#panel-right"></use></svg></button>
       </header>
@@ -70,22 +65,28 @@
       <div id="toolStatus" class="tool-status hidden"></div>
       <div id="notice" class="notice hidden"></div>
 
-      <div class="chat-floating-tools" role="group" aria-label="对话快捷操作">
-          <button id="directoryButton" class="icon-action tooltip-side-left" type="button" aria-label="展开对话目录" data-tooltip="对话目录"><svg aria-hidden="true"><use href="/icons.svg?v=6#list-tree"></use></svg></button>
-          <button id="compactButton" class="icon-action tooltip-side-left" type="button" aria-label="压缩上下文" data-tooltip="压缩上下文"><svg aria-hidden="true"><use href="/icons.svg#minimize-2"></use></svg></button>
-      </div>
       <footer class="composer-wrap">
         <section id="replyQuote" class="reply-quote hidden" aria-label="引用原文"></section>
         <div id="attachments" class="attachments hidden"></div>
         <div class="composer">
-          <button id="attachButton" class="attach icon-action" type="button" aria-label="添加图片" data-tooltip="添加图片"><svg aria-hidden="true"><use href="/icons.svg?v=2#image"></use></svg></button>
-          <input id="imageInput" type="file" accept="image/*" multiple hidden>
           <div class="prompt-box">
             <textarea id="promptInput" rows="1" placeholder="输入指令；键入 @ 搜索工作区文件"></textarea>
             <div id="atFileMenu" class="at-file-menu hidden"></div>
           </div>
-          <button id="stopButton" class="icon-action icon-danger hidden" type="button" aria-label="停止回复" data-tooltip="停止回复"><svg aria-hidden="true"><use href="/icons.svg#square-stop"></use></svg></button>
+          <div class="composer-controls">
+            <button id="attachButton" class="attach icon-action" type="button" aria-label="添加图片" data-tooltip="添加图片"><svg aria-hidden="true"><use href="/icons.svg?v=2#image"></use></svg></button>
+            <input id="imageInput" type="file" accept="image/*" multiple hidden>
+            <div class="model-picker hidden">
+              <button id="modelPickerButton" class="model-picker-button" type="button" aria-label="选择模型">读取模型……</button>
+              <div id="modelPickerPanel" class="model-picker-panel hidden">
+                <input id="modelFilter" type="search" placeholder="搜索模型名称或ID" aria-label="搜索模型" autocomplete="off">
+                <div id="modelPickerList" class="model-picker-list"></div>
+              </div>
+            </div>
+            <select id="thinkingSelect" class="hidden" aria-label="思考等级"><option value="off">off</option></select>
+          <button id="stopButton" class="icon-action assistant-primary hidden" type="button" aria-label="停止回复" data-tooltip="停止回复"><svg aria-hidden="true"><use href="/icons.svg#square-stop"></use></svg></button>
           <button id="sendButton" class="icon-action assistant-primary" type="button" aria-label="发送" data-tooltip="发送"><svg aria-hidden="true"><use href="/icons.svg#arrow-up"></use></svg></button>
+          </div>
         </div>
         <div class="footer-meta"><span id="contextMeta"></span></div>
       </footer>
@@ -174,8 +175,10 @@
           <label>API类型<select id="providerApi"><option value="">继承/选择</option><option>openai-responses</option><option>openai-completions</option><option>anthropic-messages</option><option>google-generative-ai</option><option>azure-openai-responses</option><option>bedrock-converse-stream</option></select></label>
           <label>API Key<input id="providerApiKey" type="password" autocomplete="new-password" placeholder="留空保留现有值"></label>
           <label class="check"><input id="providerAuthHeader" type="checkbox">自动添加 Authorization Bearer</label>
+          <details class="config-advanced"><summary>高级请求参数</summary><div class="field-grid">
           <label class="span-2">附加请求头（JSON）<textarea id="providerHeaders" rows="3" spellcheck="false">{}</textarea></label>
           <label class="span-2">供应商兼容参数（JSON）<textarea id="providerCompat" rows="3" spellcheck="false">{}</textarea></label>
+          </div></details>
         </div>
       </div>
       <div class="config-toolbar">
@@ -190,10 +193,14 @@
           <label class="check"><input id="modelReasoning" type="checkbox">推理模型</label>
           <label class="check"><input id="modelInputText" type="checkbox">文本输入</label><label class="check"><input id="modelInputImage" type="checkbox">图片输入</label>
           <label>上下文窗口<input id="modelContextWindow" type="number" min="0"></label><label>最大输出<input id="modelMaxTokens" type="number" min="0"></label>
+          <details class="config-advanced"><summary>费用设置</summary><div class="field-grid">
           <label>输入成本<input id="costInput" type="number" min="0" step="any"></label><label>输出成本<input id="costOutput" type="number" min="0" step="any"></label>
           <label>缓存读取成本<input id="costCacheRead" type="number" min="0" step="any"></label><label>缓存写入成本<input id="costCacheWrite" type="number" min="0" step="any"></label>
+          </div></details>
+          <details class="config-advanced"><summary>高级模型参数</summary><div class="field-grid">
           <label class="span-2">思考等级映射（JSON）<textarea id="modelThinkingMap" rows="3" spellcheck="false">{}</textarea></label>
           <label class="span-2">模型兼容参数（JSON）<textarea id="modelCompat" rows="3" spellcheck="false">{}</textarea></label>
+          </div></details>
         </div>
         <div class="config-actions"><button id="testModel">测试连接</button><span id="testModelResult" class="muted"></span></div>
       </div>

@@ -22,10 +22,11 @@ import { createDailyRecords } from "/home/daily-records.js?v=1";
 import { createRecordEditor } from "/home/record-editor.js?v=1";
 import { createHomeChat } from "/home/home-chat.js?v=3";
 import { createVSkills } from "/home/vskills.js?v=1";
+import { createHomeSettings } from './settings.js';
 
 const state = createHomeState(toLocalDate(new Date()));
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
-createReadingSettings({ container: el.chatMessages, onNotice: toast });
+const reading = createReadingSettings({ container: el.chatMessages, onNotice: toast });
 const uiDialogs = createUiDialogController({
   dialog: el.uiDialog, form: el.uiDialogForm, title: el.uiDialogTitle,
   message: el.uiDialogMessage, field: el.uiDialogField,
@@ -36,18 +37,21 @@ createWorkApps({ trigger: el.openAppsButton, invoke, uiDialogs, toast, escapeHtm
 createWorkDocuments({ trigger: el.workDocumentsButton, invoke, uiDialogs });
 
 let homeChat;
+let homeSettings;
 let vskills;
 let historySearch;
 const workspaceSwitcher = createWorkspaceSwitcher({
   trigger: el.workspaceSwitcher,
   invoke,
   uiDialogs,
-  hasDraft: () => Boolean(el.chatInput.value.trim()),
-  clearDraft: () => { el.chatInput.value = ""; homeChat?.autoResizeInput(); },
+  hasDraft: () => Boolean(el.chatInput.value.trim() || homeSettings?.hasDraft()),
+  getDraftWarning: () => homeSettings?.hasDraft() ? '切换项目将放弃未保存的项目提示词，并清空未发送的消息。' : '切换工作区将清空当前未发送的内容。',
+  clearDraft: () => { el.chatInput.value = ""; homeChat?.autoResizeInput(); homeSettings?.discard(); },
   onActivating: () => agentClient.beginTransition(),
   onActivated: ({ workspace }) => {
     historySearch?.reset();
     homeChat?.setWorkspace(workspace);
+    homeSettings?.contextChanged();
     homeChat?.scheduleHomeWorkspaceReload(`已切换到工作区：${workspace.name}`);
   },
   onError: (error) => toast(error?.message || String(error), true),
@@ -114,6 +118,8 @@ homeChat = createHomeChat({
   renderMarkdown, toast, escapeHtml, formatDateTime, loadingState, uiDialogs,
   closeVSkillDrawer: () => vskills?.closeVSkillDrawer(),
 });
+homeSettings = createHomeSettings({ trigger: el.homeSettingsButton, elements: el, invoke, agentClient,
+  getWorkspace: homeChat.workspace, loadBootstrap: homeChat.loadHomeChatBootstrap, reading, showNotice: toast });
 historySearch = createSessionSearch({
   input: el.historySearchInput, results: el.historySearchResults, defaultList: el.chatHistoryList,
   search: sessionService.search, getWorkspaceId: currentWorkspaceId,
@@ -138,6 +144,7 @@ const agentEvents = createAgentEventStream({
   onEvent: (event) => {
     if (event.type === "workspace_changed" && !event.renamed) historySearch.reset();
     homeChat.handleHomeChatEvent(event);
+    if (event.type === 'workspace_changed') homeSettings.contextChanged();
   },
   onStatus: (status, detail) => {
     if (status === "open" && detail.reconnected) {
@@ -256,6 +263,7 @@ function bindEvents() {
     if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!homeChat.isBusy()) el.chatForm.requestSubmit(); }
   });
   el.expandAssistantButton.addEventListener("click", homeChat.openAssistantWorkspace);
+  el.homeSettingsButton.addEventListener('click', homeSettings.open);
   el.openVSkillButton.addEventListener("click", vskills.openVSkillDrawer);
   el.closeVSkillButton.addEventListener("click", vskills.closeVSkillDrawer);
   el.newVSkillButton.addEventListener("click", () => vskills.openVSkillForm());

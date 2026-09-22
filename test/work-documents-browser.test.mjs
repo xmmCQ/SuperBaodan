@@ -43,9 +43,10 @@ test('文档弹窗懒加载、分类/入口管理、搜索、打开防重及只�
   assert.equal(templateResponse.status, 200); assert.match(await templateResponse.text(), /# 工作排班/);
   const file = path.join(fixture.root, '原始资料.txt'); await fs.writeFile(file, '必须保留');
   await click('.wd-categories button', '添加分类'); await fill('分类名称', '业务资料'); await save();
+  assert.equal(await browser.evaluate("document.querySelector('.wd-category > button.active').textContent"), '业务资料 · 0');
   await click('.wd-toolbar button', '添加文档'); await fill('文档名称', '本地资料'); await fill('文件路径或网址', file);
   const categoryId = (await fixture.state.workDocuments.read()).categories.find(c => c.name === '业务资料').id;
-  await fill('分类', categoryId);
+  assert.equal(await browser.evaluate("document.querySelector('.wd-editor select[aria-label=分类]').value"), categoryId);
   // Force mouse/keyboard focus states: headless Edge may keep the page inactive.
   for (const pseudo of [['focus'], ['focus', 'focus-visible']]) {
     await browser.forcePseudoState('.wd-editor[open] select', pseudo);
@@ -130,7 +131,7 @@ test('大量导入条目仅列表滚动，确认操作固定在顶部', { timeou
   assert.equal((await fixture.state.workDocuments.read()).documents.length, 119);
 });
 
-test('文档分类隐藏空项，未分类置底，选中分类清空后回到全部', { timeout: 25000 }, async t => {
+test('文档空分类显示并保留选中、可排序，删除分类后回到全部', { timeout: 25000 }, async t => {
   if (!edgeAvailable()) return t.skip('需要 Edge');
   const { fixture, browser, click, reload } = await setup(t);
   const current = await fixture.state.workDocuments.read();
@@ -143,16 +144,29 @@ test('文档分类隐藏空项，未分类置底，选中分类清空后回到�
   });
   await reload();
   await browser.waitFor("document.querySelectorAll('.wd-row').length===2");
-  assert.deepEqual(await browser.evaluate("[...document.querySelectorAll('.wd-category > button:not(.wd-drag-handle):not(.wd-icon-button)')].map(n=>n.textContent)"), ['全部 · 2','业务资料 · 1','未分类 · 1']);
+  assert.deepEqual(await browser.evaluate("[...document.querySelectorAll('.wd-category > button:not(.wd-drag-handle):not(.wd-icon-button)')].map(n=>n.textContent)"), ['全部 · 2','业务资料 · 1','空分类 · 0','未分类 · 1']);
   await click('.wd-category > button:not(.wd-drag-handle):not(.wd-icon-button)', '业务资料 · 1');
   const next = await fixture.state.workDocuments.read();
   await fixture.state.workDocuments.save({ ...next, documents: next.documents.filter(d=>d.id!=='two') });
   await reload();
-  await browser.waitFor("document.querySelector('.wd-category > button:not(.wd-drag-handle):not(.wd-icon-button).active')?.textContent==='全部 · 1'");
-  assert.deepEqual(await browser.evaluate("[...document.querySelectorAll('.wd-category > button:not(.wd-drag-handle):not(.wd-icon-button)')].map(n=>n.textContent)"), ['全部 · 1','未分类 · 1']);
+  await browser.waitFor("document.querySelector('.wd-category > button.active')?.textContent==='业务资料 · 0'");
+  assert.deepEqual(await browser.evaluate("[...document.querySelectorAll('.wd-category > button:not(.wd-drag-handle):not(.wd-icon-button)')].map(n=>n.textContent)"), ['全部 · 1','业务资料 · 0','空分类 · 0','未分类 · 1']);
+  assert.equal(await browser.evaluate("document.querySelectorAll('.wd-row').length"), 0);
+  await browser.evaluate(`(()=>{const from=document.querySelector('[data-sort-id=empty] .wd-drag-handle'),to=document.querySelector('[data-sort-id=business]'),r=to.getBoundingClientRect(),dt=new DataTransfer();from.dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:dt}));to.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:r.top+2}));})()`);
+  await browser.waitFor("!document.querySelector('.wd-toolbar .wd-primary').disabled");
+  assert.deepEqual((await fixture.state.workDocuments.read()).categories.filter(c=>c.id!=='uncategorized').map(c=>c.id), ['empty','business']);
+  await reload();
+  assert.equal(await browser.evaluate("document.querySelector('.wd-category[data-sort-id]').dataset.sortId"), 'empty');
   assert.ok((await fixture.state.workDocuments.read()).categories.some(c=>c.id==='empty'));
   await click('.wd-toolbar button', '添加文档');
   assert.equal(await browser.evaluate("[...document.querySelector('.wd-editor select[aria-label=分类]').options].some(n=>n.textContent==='空分类')"), true);
+  assert.equal(await browser.evaluate("document.querySelector('.wd-editor select[aria-label=分类]').value"), 'business');
+  await click('.wd-footer button', '取消');
+  await browser.waitFor("!document.querySelector('.wd-editor[open]')");
+  await click('[data-sort-id=business] .wd-category-menu button', '删除分类');
+  await browser.waitFor('uiDialog.open');await browser.evaluate('uiDialogConfirm.click()');
+  await browser.waitFor("document.querySelector('.wd-category > button.active')?.textContent==='全部 · 1'");
+  assert.deepEqual(browser.issues, []);
 });
 
 test('源文件删除需确认勾选，关闭重置，未勾选无确认仅删入口', { timeout: 25000 }, async t => {
