@@ -4,9 +4,9 @@ Windows 个人工作台，集中管理日历、待办、每日记录、工作文
 
 使用独立窗口运行。关闭窗口后驻留托盘，任务继续执行；从托盘菜单退出应用。
 
-## 启动
+## 安装
 
-安装包暂未提供。在项目目录执行 `npm start` 启动桌面应用。
+从 [GitHub Releases](https://github.com/xmmCQ/SuperBaodan/releases/latest) 下载 `SuperBaodan.exe`，运行安装。
 
 ![超级宝蛋首页](docs/screenshots/home.png)
 
