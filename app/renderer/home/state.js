@@ -17,6 +17,8 @@ export function createHomeState(today) {
       dragSourceDate: null,
       dashboardRequest: 0,
       dayRequest: 0,
+      requestedDate: null,
+      dayLoading: false,
     },
     chat: {
       chatBusy: false,
@@ -42,6 +44,8 @@ export function createHomeState(today) {
       expandedIds: new Set(),
       searchQuery: "",
       dayRequest: 0,
+      requestedDate: null,
+      dayLoading: false,
       monthRequest: 0,
       searchRequest: 0,
       saving: false,

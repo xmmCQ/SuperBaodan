@@ -50,7 +50,31 @@
 #settingsDialog .skill-diagnostics { flex: none; max-height: 180px; overflow: auto; }
 #settingsDialog .skill-diagnostics summary { cursor: pointer; font-size: var(--ui-meta); }
 #settingsDialog .skill-diagnostic-row { overflow-wrap: anywhere; }
-#settingsDialog #preferencesTab .preferences-fields { max-width: 600px; grid-template-columns: minmax(0, 1fr) 160px; gap: 12px; align-items: start; }
+#settingsDialog .model-preference-section { display: grid; gap: 8px; min-width: 0; }
+#settingsDialog .model-preference-section > h3 { margin: 0; }
+#settingsDialog .model-preferences-heading { margin-top: 0; }
+#settingsDialog #refreshModelCatalog { min-height: 36px; padding: 6px 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); background: var(--ui-canvas); color: var(--ui-text); cursor: pointer; }
+#settingsDialog .model-refresh-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; color: var(--ui-secondary); font-size: var(--ui-meta); }
+#settingsDialog .model-search-row { display: flex; align-items: center; gap: 8px; margin: 0; }
+#settingsDialog :is(#saveModelDisplay,#saveModelDefaults) { height: 36px; min-height: 36px; padding: 0 12px; border: 1px solid var(--ui-primary); border-radius: var(--ui-radius-pill); background: var(--ui-primary); color: #fff; white-space: nowrap; }
+#settingsDialog :is(#saveModelDisplay,#saveModelDefaults):hover { border-color: var(--ui-primary-hover); background: var(--ui-primary-hover); color: #fff; }
+#settingsDialog .model-dirty-note:not(:empty) { margin-left: 8px; }
+#settingsDialog .model-selection-actions button { min-height: 36px; flex: none; }
+#settingsDialog .model-search-row input { min-width: 0; flex: 1; min-height: 36px; padding: 0 12px 0 34px; border: 1px solid var(--ui-control-border); border-radius: var(--ui-radius-input); }
+#settingsDialog .model-preferences-list { max-height: 200px; overflow: auto; }
+#settingsDialog .model-preference-provider { padding: 4px 10px; margin: 0; background: transparent; color: var(--ui-secondary); font-size: var(--ui-meta); font-weight: 500; }
+#settingsDialog .preference-row { grid-template-columns: 24px minmax(0, 1fr) auto; margin: 0; padding: 6px 10px; min-height: 36px; }
+#settingsDialog .preference-row > span:not(.model-new-badge) { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; min-width: 0; }
+#settingsDialog .preference-row b, #settingsDialog .preference-row small { display: inline; overflow-wrap: anywhere; }
+#settingsDialog .preference-row b { font-size: var(--ui-body); font-weight: 500; }
+#settingsDialog .preference-row small { font-size: var(--ui-meta); }
+#settingsDialog .preference-row.default-model b::after { content: attr(data-default-label); }
+#settingsDialog .model-new-badge { color: var(--ui-success); font-size: var(--ui-meta); }
+#settingsDialog .model-refresh-error { color: var(--ui-danger); font-size: var(--ui-meta); }
+#settingsDialog .model-default-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--ui-border); }
+#settingsDialog #modelRefreshDetails summary { cursor: pointer; font-size: var(--ui-meta); }
+#settingsDialog .model-display-note { margin: 0; font-size: var(--ui-meta); }
+#settingsDialog #preferencesTab .preferences-fields { width: 100%; max-width: 720px; grid-template-columns: minmax(0, 1fr) 160px auto; gap: 12px; align-items: end; }
 #settingsDialog #preferencesTab .preferences-fields label { display: grid; align-items: center; min-width: 0; gap: 8px; }
 #settingsDialog #preferencesTab .preferences-fields select { width: 100%; min-width: 0; text-overflow: ellipsis; }
-#settingsDialog #preferencesTab .settings-scope-note { margin: 8px 0 12px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--ui-secondary); font-size: var(--ui-meta); }
+#settingsDialog #preferencesTab .settings-scope-note { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--ui-secondary); font-size: var(--ui-meta); }

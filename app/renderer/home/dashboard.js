@@ -10,11 +10,8 @@ export function createDashboard({
   renderOverdue,
   renderLongTerm,
   toast,
-  formatChineseDate,
-  loadingState,
   renderTaskList,
   dayTaskMeta,
-  emptyState,
   setTaskCount
 }) {
 async function loadDashboard(showToast = false) {
@@ -43,33 +40,26 @@ async function loadDashboard(showToast = false) {
   }
 }
 
-async function loadDay(date) {
+async function prepareDay(date) {
   const requestId = ++state.dayRequest;
-  state.selectedDate = date;
+  state.requestedDate = date;
+  const current = () => requestId === state.dayRequest && date === state.requestedDate;
   if (date.slice(0, 7) !== state.month) {
     state.month = date.slice(0, 7);
     await loadDashboard();
   } else {
     renderCalendar();
   }
-  if (requestId !== state.dayRequest || date !== state.selectedDate) return;
-  el.selectedDateTitle.textContent = formatChineseDate(date);
-  el.dayTasks.innerHTML = loadingState();
-  try {
-    const data = await invoke("tasks.day", { id: date });
-    if (requestId !== state.dayRequest || date !== state.selectedDate) return;
+  if (!current()) return;
+  const data = await invoke("tasks.day", { id: date });
+  if (!current()) return;
+  return { current, fresh: !data.stale, commit() {
+    state.selectedDate = date;
     state.sourceRevision = data.updatedAt;
     rememberTasks(data.tasks);
     setTaskCount(data.tasks.length);
     renderTaskList(el.dayTasks, data.tasks, "当天没有安排", "◌", dayTaskMeta, true);
-    return !data.stale;
-  } catch (error) {
-    if (requestId === state.dayRequest) {
-      setTaskCount(0);
-      el.dayTasks.replaceChildren(createReadError(error.message, () => loadDay(state.selectedDate)));
-    }
-    return false;
-  }
+  } };
 }
-  return { loadDashboard, loadDay };
+  return { loadDashboard, prepareDay };
 }

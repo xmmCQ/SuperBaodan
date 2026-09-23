@@ -20,7 +20,7 @@ export function createTasks({
   const recurrenceLabels = { day: "每天", week: "每周", month: "每月", year: "每年" };
   const loadDashboard = (...args) => loadDashboardCallback(...args);
   const loadDay = (...args) => loadDayCallback(...args);
-  const order = createCardOrder({ container: el.dayTasks, kind: 'tasks', cardSelector: '.task-card', getDate: () => state.selectedDate, keyForItem: taskOrderKey, busy: () => state.taskSaving, onNotice: toast });
+  const order = createCardOrder({ container: el.dayTasks, kind: 'tasks', cardSelector: '.task-card', getDate: () => state.selectedDate, keyForItem: taskOrderKey, busy: () => state.taskSaving || state.dayLoading, onNotice: toast });
   const longtermOrder = createCardOrder({ container: el.longtermTasks, scrollContainer: el.taskSummaryBody, kind: 'longterm', cardSelector: '.task-card', getDate: () => 'all', keyForItem: taskOrderKey, busy: () => state.taskSaving || !el.taskSummaryDialog.open, onNotice: toast });
 function renderOverdue(tasks) {
   summary.update('overdue', tasks.length);
@@ -115,7 +115,7 @@ function moveKeepsDateRange(task, sourceDate, targetDate) {
 
 function handleTaskDragStart(event) {
   const card = event.target.closest(".task-card");
-  if (!card || state.taskSaving) {
+  if (!card || state.taskSaving || (state.dayLoading && el.dayTasks.contains(card))) {
     event.preventDefault();
     return;
   }
@@ -150,6 +150,7 @@ function handleCalendarDragOver(event) {
 }
 
 function handleCalendarDrop(event) {
+  if (state.dayLoading) { resetTaskDrag(); return; }
   if (!state.draggedTaskId) return;
   const day = event.target.closest(".calendar-day");
   if (!day || !el.calendarGrid.contains(day)) return;
@@ -182,7 +183,7 @@ function resetTaskDrag() {
 function handleTaskListClick(event) {
   const actionButton = event.target.closest("[data-action]");
   const card = event.target.closest("[data-task-id]");
-  if (!actionButton || !card) return;
+  if (!actionButton || !card || (state.dayLoading && el.dayTasks.contains(card))) return;
   const task = state.taskById.get(card.dataset.taskId);
   if (!task) {
     toast("事项已变化，请刷新后重试", true);
@@ -260,7 +261,7 @@ function closeTaskDatePicker() {
 }
 
 function openTaskModal(task = null, kind = 'daily') {
-  if (state.taskSaving) return;
+  if (state.taskSaving || (state.dayLoading && !task && kind === 'daily')) return;
   state.taskFormFocus = document.activeElement;
   summary.suspend();
   closeTaskDatePicker();
@@ -379,10 +380,8 @@ async function moveTaskToDate(task, sourceDate, targetDate) {
     const data = await invoke("tasks.move", { id: task.id, revision: state.sourceRevision, sourceDate, targetDate });
     state.sourceRevision = data.updatedAt;
     state.taskById.clear();
-    state.selectedDate = targetDate;
     state.month = targetDate.slice(0, 7);
-    await loadDashboard();
-    await loadDay(targetDate);
+    await Promise.all([loadDay(targetDate), loadDashboard()]);
     toast(`工作计划已移动到 ${targetDate}`);
   } catch (error) {
     if (error.status === 409) await refreshTaskViews();
@@ -413,7 +412,7 @@ async function deleteTask(task, button) {
 
 async function refreshTaskViews(strict = false) {
   const dashboard = await loadDashboard();
-  const day = await loadDay(state.selectedDate);
+  const day = await loadDay(state.requestedDate || state.selectedDate);
   if (strict && (dashboard === false || day === false)) throw new Error('刷新工作列表失败');
 }
 

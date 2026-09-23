@@ -22,8 +22,13 @@ for(const page of ['home','assistant'])test(`${page}：上下分区、模型菜�
   const longWidth=await b.evaluate("(()=>{const previous=modelPickerButton.textContent;modelPickerButton.textContent='很长的模型名称'.repeat(12);const width=modelPickerButton.getBoundingClientRect().width;modelPickerButton.textContent=previous;return width})()");
   assert.ok(longWidth>shortWidth&&longWidth<=280, '长模型名展开但不挤出工具行');
   assert.equal(fixture.state.operations.includes('agent:prompt'),false);
+  const mediumWidth=await b.evaluate('thinkingSelect.getBoundingClientRect().width');
   await b.evaluate("thinkingSelect.value='high';thinkingSelect.dispatchEvent(new Event('change'))");await b.waitFor("changes.some(c=>c.type==='set_thinking_level'&&c.level==='high')&&thinkingSelect.value==='high'");
   assert.equal(fixture.state.sessionSettings.get(fixture.state.activeSessionId).thinkingLevel,'high');
+  const highWidth=await b.evaluate('thinkingSelect.getBoundingClientRect().width');
+  assert.ok(highWidth<mediumWidth, '思考等级应按选中文字收缩');
+  const widths=await b.evaluate("(()=>{thinkingSelect.value='off';const short=thinkingSelect.getBoundingClientRect().width;thinkingSelect.value='medium';const long=thinkingSelect.getBoundingClientRect().width;thinkingSelect.value='high';return [short,long,thinkingSelect.getBoundingClientRect().height]})()");
+  assert.ok(widths[0]<highWidth&&widths[1]>highWidth);assert.equal(widths[2],36);
   await click(b,'#modelPickerButton');await b.waitFor("modelPickerPanel.matches(':popover-open')");
   await b.evaluate("modelFilter.value='ASTRA';modelFilter.dispatchEvent(new Event('input'))");assert.equal(await b.evaluate('modelPickerList.querySelectorAll(".model-option").length'),1);
   await b.evaluate("modelFilter.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");await b.waitFor("!modelPickerPanel.matches(':popover-open')");assert.equal(await b.evaluate('document.activeElement===modelPickerButton'),true);

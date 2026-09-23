@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { browserScenario, paint } from './helpers/browser-scenario.mjs';
+
+const initScript=`
+  const NativeDate=Date;window.Date=class extends NativeDate {constructor(...args){super(...(args.length?args:['2026-09-04T12:00:00']));}static now(){return NativeDate.now();}};
+  const original=fetch;window.holdDays=false;window.heldDays=[];
+  window.fetch=(...args)=>{const url=new URL(String(args[0]),location.href);const kind=url.pathname.startsWith('/api/day/')?'tasks':url.pathname==='/api/daily-records'&&(!args[1]?.method||args[1].method==='GET')?'records':null;
+    if(holdDays&&kind)return new Promise(resolve=>heldDays.push({kind,date:kind==='tasks'?url.pathname.split('/').at(-1):url.searchParams.get('date'),done:false,async release(fail){this.done=true;resolve(fail?new Response(JSON.stringify({error:'隔离读取失败'}),{status:503,headers:{'Content-Type':'application/json'}}):await original(...args));}}));
+    return original(...args);
+  };
+  window.releaseDay=async(date,kind,fail=false)=>{const request=heldDays.find(r=>!r.done&&r.date===date&&r.kind===kind);if(!request)throw new Error('未收到请求 '+date+kind);await request.release(fail);};
+`;
+test('切日期保留旧列表、原子更新、禁用操作、乱序丢弃及失败重试', {timeout:35000}, async t=>{
+  const scenario=await browserScenario(t,{initScript,configure:({state})=>{
+    state.tasks=[4,4,5,6,6,6].map((day,i)=>({id:'task-'+i,kind:'daily',text:'日期'+day+'任务'+i,editableText:'任务'+i,checked:false,plannedDate:`2026-09-0${day}`,dueDate:`2026-09-0${day}`,headingPath:['工作待办']}));
+    state.dailyRecords=[4,5,5,6,6].map((day,i)=>({id:'record-'+i,date:`2026-09-0${day}`,title:'日期'+day+'记录'+i,type:'work',content:'隔离正文',createdAt:'2026-09-04T08:00:00Z',updatedAt:'2026-09-04T08:00:00Z'}));
+  }});if(!scenario)return;
+  const {browser:b,navigate,fixture}=scenario;await navigate('/');
+  await b.waitFor("dayTasks.children.length===2&&dailyRecordList.querySelectorAll('.daily-record-card').length===1&&!newTaskButton.disabled");
+  await b.evaluate(`window.dayView=()=>({title:selectedDateTitle.textContent,tasks:dayTasksTabCount.textContent,records:dailyRecordsTabCount.textContent,taskIds:[...dayTasks.querySelectorAll('[data-task-id]')].map(n=>n.dataset.taskId),recordIds:[...dailyRecordList.querySelectorAll('[data-record-id]')].map(n=>n.dataset.recordId)});window.oldTaskNode=dayTasks.firstElementChild;window.oldRecordNode=dailyRecordList.firstElementChild;window.views=[];new MutationObserver(()=>views.push(dayView())).observe(document.querySelector('.day-panel'),{subtree:true,childList:true,characterData:true});holdDays=true;`);
+  const old=await b.evaluate('dayView()');
+  const click=date=>b.evaluate(`calendarGrid.querySelector('[data-date="${date}"]').click()`);
+  const release=(date,kind,fail=false)=>b.evaluate(`releaseDay('${date}','${kind}',${fail})`);
+  const pending=date=>b.waitFor(`heldDays.filter(r=>!r.done&&r.date==='${date}').length===2`);
+  await click('2026-09-05');await pending('2026-09-05');
+  assert.deepEqual(await b.evaluate('dayView()'),old);
+  assert.equal(await b.evaluate('dayTasksPane.inert&&dailyRecordsPane.inert&&newTaskButton.disabled&&newDailyRecordButton.disabled&&dayTasks.firstElementChild===oldTaskNode&&dailyRecordList.firstElementChild===oldRecordNode'),true);
+  const operations=fixture.state.operations.length;
+  await b.evaluate("dayTasks.querySelector('[data-action=toggle]').click();dayTasks.querySelector('[data-action=edit]').click();dailyRecordList.querySelector('[data-record-action=edit]').click();newTaskButton.click();newDailyRecordButton.click()");
+  assert.equal(await b.evaluate("taskModal.classList.contains('hidden')&&dailyRecordModal.classList.contains('hidden')"),true);
+  assert.equal(fixture.state.operations.length,operations);
+  await release('2026-09-05','tasks');await paint(b);assert.deepEqual(await b.evaluate('dayView()'),old);
+  await b.waitFor("!dayLoadStatus.classList.contains('hidden')");assert.equal(await b.evaluate('dayLoadMessage.textContent'),'正在读取…');
+  await release('2026-09-05','records');await b.waitFor("selectedDateTitle.textContent.includes('9月5日')&&!dayTasksPane.inert");
+  const next=await b.evaluate('dayView()');assert.equal(next.tasks,'1');assert.equal(next.records,'2');
+  assert.ok((await b.evaluate('views')).every(view=>JSON.stringify(view)===JSON.stringify(old)||JSON.stringify(view)===JSON.stringify(next)), '不得出现标题/数量/列表混合日期');
+  assert.equal(await b.evaluate("dayLoadStatus.classList.contains('hidden')"),true);
+  await click('2026-09-04');await pending('2026-09-04');await click('2026-09-06');await pending('2026-09-06');
+  await release('2026-09-04','tasks',true);await release('2026-09-04','records');await paint(b);
+  assert.deepEqual(await b.evaluate('dayView()'),next);assert.equal(await b.evaluate('dayTasksPane.inert'),true);
+  await release('2026-09-06','records');await paint(b);assert.deepEqual(await b.evaluate('dayView()'),next);
+  await release('2026-09-06','tasks');await b.waitFor("selectedDateTitle.textContent.includes('9月6日')&&!dayTasksPane.inert");
+  const latest=await b.evaluate('dayView()');assert.equal(latest.tasks,'3');assert.equal(latest.records,'2');
+  await click('2026-09-07');await pending('2026-09-07');await release('2026-09-07','tasks',true);
+  await b.waitFor("!dayLoadRetry.classList.contains('hidden')&&!dayTasksPane.inert");
+  await release('2026-09-07','records');await paint(b);assert.deepEqual(await b.evaluate('dayView()'),latest);
+  await b.evaluate('newTaskButton.click()');assert.equal(await b.evaluate('taskDueDate.value'),'2026-09-06');await b.evaluate('closeTaskModal.click();dayLoadRetry.click()');
+  await pending('2026-09-07');await release('2026-09-07','tasks');await release('2026-09-07','records');
+  await b.waitFor("selectedDateTitle.textContent.includes('9月7日')&&!dayTasksPane.inert");
+  assert.equal(await b.evaluate('dayTasksTabCount.textContent+dailyRecordsTabCount.textContent'),'00');
+  await click('2026-10-01');await pending('2026-10-01');await release('2026-10-01','records');await release('2026-10-01','tasks');
+  await b.waitFor("selectedDateTitle.textContent.includes('10月1日')&&!dayTasksPane.inert");
+  assert.equal(await b.evaluate("monthTitle.textContent.includes('10月')"),true);
+  assert.deepEqual(b.issues,[]);
+});

@@ -85,7 +85,7 @@ sessions = createSessionsView({
   state, elements: el, invoke, command, uiDialogs, showNotice, showError,
   loadBootstrap, updateStateFromAgent, renderMarkdown, markdownBodyWithoutFrontmatter,
   getWorkspace: () => workspace?.workspace(), readingContainer: el.messages,
-  captureContext: agentClient.captureContext,
+  captureContext: agentClient.captureContext, capturePreferences: agentClient.captureWorkspace,
 }));
 
 const agentEvents = createAgentEventStream({
@@ -149,7 +149,7 @@ async function applyBootstrap(data, current) {
   if (data.workspaces?.warning && !sessionStorage.getItem("super-baodan-workspace-warning")) {
     sessionStorage.setItem("super-baodan-workspace-warning", "shown"); showNotice(data.workspaces.warning, true);
   }
-  models.setEnabledModels(enabledModels);
+  models.setEnabledModels(enabledModels,data.visibleModelKeys);
   sessions.setCurrentSession(data.state?.sessionId);
   chat.setRuntimeState({ running: Boolean(data.state?.isStreaming), streaming: Boolean(data.state?.isStreaming) });
   workspace.setTurnFiles(data.turnFiles);
@@ -165,6 +165,7 @@ async function applyBootstrap(data, current) {
 }
 
 function handleAgentEvent(event) {
+  if (event.type === 'models_changed') { void models.syncModelCatalog(); return; }
   const agentState = agentClient.applyEvent(event);
   chat.observeSyncEvent(event);
   switch (event.type) {

@@ -30,6 +30,23 @@ export function createDayView({ state, elements: el }) {
     el.dayCount.textContent = `${count} 项`;
   }
 
+  function setLoading(loading) {
+    state.dayLoading = loading;
+    for (const pane of [el.dayTasksPane, el.dailyRecordsPane]) {
+      pane.inert = loading;
+      pane.setAttribute('aria-busy', String(loading));
+    }
+    el.newTaskButton.disabled = el.newDailyRecordButton.disabled = loading;
+  }
+
+  function showNotice(message, retry = null) {
+    el.dayLoadMessage.textContent = message;
+    el.dayLoadMessage.title = message;
+    el.dayLoadStatus.classList.toggle('hidden', !message);
+    el.dayLoadRetry.classList.toggle('hidden', !retry);
+    el.dayLoadRetry.onclick = retry;
+  }
+
   setActive(state.activeTab);
-  return { setActive, setTaskCount, setRecordCount, active: () => state.activeTab };
+  return { setActive, setTaskCount, setRecordCount, setLoading, showNotice, active: () => state.activeTab };
 }

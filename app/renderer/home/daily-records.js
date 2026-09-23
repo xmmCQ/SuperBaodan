@@ -1,5 +1,4 @@
 import { createCardOrder } from './card-order.js';
-import { createReadError } from './read-error.js';
 
 const TYPE_LABELS = { meeting: "会议纪要", work: "工作记录", idea: "想法随记", other: "其他" };
 
@@ -20,27 +19,28 @@ export function createDailyRecords({
   getChatBusy,
   sendChat,
 }) {
-  let searchTimer = null;
-  const order = createCardOrder({ container: el.dailyRecordList, kind: 'records', cardSelector: '.daily-record-card', getDate: () => state.selectedDate, busy: () => state.saving, onNotice: toast });
+  let searchTimer = null, pendingSearch = false;
+  const order = createCardOrder({ container: el.dailyRecordList, kind: 'records', cardSelector: '.daily-record-card', getDate: () => state.selectedDate, busy: () => state.saving || state.dayLoading, onNotice: toast });
 
-  async function loadDate(date) {
+  async function prepareDate(date) {
     const requestId = ++state.dayRequest;
-    state.selectedDate = date;
-    if (!state.searchQuery) el.dailyRecordList.innerHTML = emptyState('正在读取…', '· · ·');
-    try {
-      const data = await invoke("records.list", { date: date });
-      if (requestId !== state.dayRequest || date !== state.selectedDate) return;
+    state.requestedDate = date;
+    const current = () => requestId === state.dayRequest && date === state.requestedDate;
+    const data = await invoke("records.list", { date });
+    if (!current()) return;
+    return { current, commit() {
+      state.selectedDate = date;
       state.records = data.records || [];
       remember(state.records);
       dayView.setRecordCount(state.records.length);
       if (!state.searchQuery) renderList(state.records, false);
-    } catch (error) {
-      if (requestId !== state.dayRequest) return;
-      state.records = [];
-      dayView.setRecordCount(0);
-      if (!state.searchQuery) el.dailyRecordList.replaceChildren(createReadError(error.message, () => loadDate(state.selectedDate)));
-      toast(error.message, true);
-    }
+    } };
+  }
+
+  function resumeSearch() {
+    if (!pendingSearch) return;
+    pendingSearch = false;
+    void runSearch();
   }
 
   async function loadMonth(month) {
@@ -97,7 +97,7 @@ export function createDailyRecords({
   function handleListClick(event) {
     const button = event.target.closest("[data-record-action]");
     const card = event.target.closest("[data-record-id]");
-    if (!button || !card || state.saving) return;
+    if (!button || !card || state.saving || state.dayLoading) return;
     const record = state.recordById.get(card.dataset.recordId);
     if (!record) return void toast("记录已变化，请刷新后重试", true);
     const action = button.dataset.recordAction;
@@ -122,6 +122,7 @@ export function createDailyRecords({
 
   async function runSearch(query = el.dailyRecordSearch.value.trim()) {
     clearTimeout(searchTimer);
+    if (state.dayLoading) { pendingSearch = true; return; }
     state.searchQuery = query;
     const requestId = ++state.searchRequest;
     if (!query) {
@@ -136,6 +137,7 @@ export function createDailyRecords({
     try {
       const data = await invoke("records.search", { q: query });
       if (requestId !== state.searchRequest || query !== state.searchQuery) return;
+      if (state.dayLoading) { pendingSearch = true; return; }
       remember(data.records || []);
       renderList(data.records || [], true);
       el.dailyRecordSearchStatus.textContent = data.truncated
@@ -143,12 +145,14 @@ export function createDailyRecords({
         : `共找到 ${data.total} 条记录`;
     } catch (error) {
       if (requestId !== state.searchRequest) return;
+      if (state.dayLoading) { pendingSearch = true; return; }
       el.dailyRecordSearchStatus.textContent = error.message;
       el.dailyRecordList.innerHTML = emptyState(error.message, "!");
     }
   }
 
   function clearSearch() {
+    if (state.dayLoading) return;
     state.searchQuery = "";
     state.searchRequest += 1;
     el.dailyRecordSearch.value = "";
@@ -188,7 +192,7 @@ export function createDailyRecords({
   async function afterSaved() { await refreshViews(); }
 
   async function refreshViews() {
-    await Promise.all([loadDate(getSelectedDate()), loadMonth(getMonth())]);
+    await Promise.all([navigateToDate(getSelectedDate()), loadMonth(getMonth())]);
     if (state.searchQuery) await runSearch(state.searchQuery);
   }
 
@@ -199,7 +203,7 @@ export function createDailyRecords({
       const data = await invoke("records.list", { date: known.date });
       remember(data.records || []);
       const latest = (data.records || []).find((item) => item.id === id) || null;
-      if (known.date === getSelectedDate()) {
+      if (!state.dayLoading && known.date === getSelectedDate()) {
         state.records = data.records || [];
         dayView.setRecordCount(state.records.length);
         if (!state.searchQuery) renderList(state.records, false);
@@ -213,7 +217,7 @@ export function createDailyRecords({
   function plainText(markdown) { return String(markdown || "").replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`~\[\]()-]/g, " ").replace(/\s+/g, " ").trim(); }
 
   return {
-    loadDate, loadMonth, recordCountForDate, handleListClick, scheduleSearch, runSearch, clearSearch,
-    afterSaved, refreshConflict, refreshViews, openNew: () => editor.open(null, getSelectedDate()),
+    prepareDate, resumeSearch, loadMonth, recordCountForDate, handleListClick, scheduleSearch, runSearch, clearSearch,
+    afterSaved, refreshConflict, refreshViews, openNew: () => { if (!state.dayLoading) editor.open(null, getSelectedDate()); },
   };
 }

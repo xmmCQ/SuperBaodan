@@ -1,3 +1,6 @@
+import { createModelPreferences } from './model-preferences.js';
+import { modelScopeMatches, supportedThinkingLevels } from '../../shared/model-preferences.js';
+
 export function createModelsController({
   state,
   elements: el,
@@ -9,9 +12,25 @@ export function createModelsController({
   showSettingsToast,
   loadBootstrap,
   updateStateFromAgent,
-  captureContext = () => () => true
+  captureContext = () => () => true,
+  capturePreferences = captureContext,
+  onCatalogChanged
 }) {
-  let availableModels = [];
+  let availableModels = [], preferences, catalogRead = 0, configConfirming = false;
+  function applyModelCatalog(catalog) { catalogRead += 1; setEnabledModels(catalog.enabledModels,catalog.visibleModelKeys); renderModels(catalog.models || [], state.currentModel); }
+  function notifyCatalog(catalog) { catalogRead += 1; (onCatalogChanged || applyModelCatalog)(catalog); }
+  function getPreferences() { return preferences ||= createModelPreferences({elements:el,invoke,uiDialogs,showSettingsToast,onCatalog:notifyCatalog,captureContext:capturePreferences}); }
+  async function syncModelCatalog() {
+    const current = capturePreferences(), request = ++catalogRead;
+    let catalog;
+    try { catalog = await invoke('models.catalog',{}); }
+    catch (error) { if (current() && request === catalogRead) showError?.(error); return; }
+    if (!current() || request !== catalogRead) return;
+    try {
+      if (preferences && !preferences.isBusy()) preferences.accept(catalog);
+      else notifyCatalog(catalog);
+    } catch (error) { if (current()) showError?.(error); }
+  }
   const validModel = (model) => Boolean(model?.provider && model?.id && model.provider !== "unknown" && model.id !== "unknown");
   const KEEP_SECRET = "__SUPER_BAODAN_KEEP_SECRET__";
   const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -67,7 +86,7 @@ function renderModels(models, current) {
   availableModels = models.filter(validModel);
   models = availableModels;
   const enabled = state.enabledModels;
-  const visible = !enabled.length ? models : models.filter((model) => {
+  const visible = Array.isArray(state.visibleModelKeys) ? models.filter(model=>state.visibleModelKeys.includes(`${model.provider}/${model.id}`)) : !enabled.length ? models : models.filter((model) => {
     const key = `${model.provider}/${model.id}`;
     return enabled.some((pattern) => modelScopeMatches(pattern, key, model.id));
   });
@@ -239,89 +258,32 @@ async function testConfiguredModel() {
   catch (error) { el.testModelResult.textContent = `失败：${error.message}`; showError(error); }
 }
 
-async function loadModelCatalog() { state.catalog = await invoke("models.catalog", {}); renderModelPreferences(); }
-
-function renderModelPreferences() {
-  const catalog = state.catalog || { models: [] }; const enabled = catalog.enabledModels || [];
-  el.defaultModelSelect.replaceChildren();
-  let group = null; let optgroup;
-  for (const model of catalog.models) {
-    if (model.provider !== group) { group = model.provider; optgroup = document.createElement("optgroup"); optgroup.label = group === "openai-codex" ? "ChatGPT Plus/Pro" : group; el.defaultModelSelect.append(optgroup); }
-    const option = new Option(model.name || model.id, `${model.provider}||${model.id}`); option.selected = catalog.defaultModel?.provider === model.provider && catalog.defaultModel?.modelId === model.id; optgroup.append(option);
-  }
-  el.modelPreferencesList.replaceChildren();
-  for (const model of catalog.models) {
-    const key = `${model.provider}/${model.id}`; const row = document.createElement("div"); row.className = "preference-row"; row.dataset.modelKey = key;
-    const visible = document.createElement("input"); visible.type = "checkbox"; visible.className = "model-visible"; visible.checked = !enabled.length || enabled.some((pattern) => modelScopeMatches(pattern, key, model.id));
-    const name = document.createElement("div"); const strong = document.createElement("b"); strong.textContent = model.name || model.id; const small = document.createElement("small"); small.textContent = ` ${key}`; name.append(strong, small);
-    row.append(visible, name); el.modelPreferencesList.append(row);
-  }
-  syncDefaultModelPreference(catalog.defaultThinkingLevel || "off");
-  state.preferencesSnapshot = modelPreferencesFormSnapshot();
-}
-
-function supportedThinkingLevels(model) {
-  if (!model?.reasoning) return ["off"];
-  const available = new Set(["off", "minimal", "low", "medium", "high"]);
-  for (const [level, mapped] of Object.entries(model.thinkingLevelMap || {})) {
-    if (mapped == null) available.delete(level); else available.add(level);
-  }
-  return THINKING_LEVELS.filter((level) => available.has(level));
-}
-
-function syncDefaultModelPreference(preferredLevel = el.defaultThinking.value) {
-  el.defaultModelSelect.title = el.defaultModelSelect.selectedOptions[0]?.textContent || '';
-  const value = el.defaultModelSelect.value;
-  const [provider, modelId] = value.split("||");
-  const defaultKey = `${provider}/${modelId}`;
-  for (const row of el.modelPreferencesList.querySelectorAll(".preference-row")) {
-    const checkbox = row.querySelector(".model-visible");
-    const isDefault = row.dataset.modelKey === defaultKey;
-    row.classList.toggle("default-model", isDefault);
-    checkbox.disabled = isDefault;
-    if (isDefault) checkbox.checked = true;
-  }
-  const model = state.catalog?.models?.find((item) => item.provider === provider && item.id === modelId);
-  const levels = supportedThinkingLevels(model);
-  el.defaultThinking.replaceChildren(...levels.map((level) => new Option(level, level)));
-  el.defaultThinking.value = levels.includes(preferredLevel) ? preferredLevel : levels.includes("high") ? "high" : levels[0] || "off";
-}
-
-function modelScopeMatches(pattern, key, id) { if (!pattern) return false; const base = String(pattern).split(":")[0]; if (!base.includes("*") && !base.includes("?")) return base === key || base === id; const regex = new RegExp(`^${base.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`, "i"); return regex.test(key) || regex.test(id); }
-
-function updateModelVisibility(mode) {
-  for (const checkbox of el.modelPreferencesList.querySelectorAll(".model-visible")) {
-    if (checkbox.disabled) continue;
-    checkbox.checked = mode === "all" ? true : !checkbox.checked;
-  }
-}
-
-function modelPreferencesFormSnapshot() {
-  const rows = [...el.modelPreferencesList.querySelectorAll(".preference-row")];
-  return JSON.stringify({
-    defaultModel: el.defaultModelSelect.value,
-    defaultThinkingLevel: el.defaultThinking.value,
-    visibleModels: rows.filter((row) => row.querySelector(".model-visible").checked).map((row) => row.dataset.modelKey),
-    modelCount: rows.length,
-  });
-}
-
-async function saveModelPreferences() {
+async function loadModelCatalog() { return getPreferences().load(); }
+const canLeavePreferences = () => preferences?.canLeave() ?? Promise.resolve(true);
+const hasPreferencesDraft = () => preferences?.hasDraft() || false;
+async function canLeaveModelConfig() {
+  if (!state.modelsConfig || !state.modelsConfigSnapshot) return true;
+  let dirty = false;
+  try { commitProviderForm(); dirty = JSON.stringify(state.modelsConfig) !== state.modelsConfigSnapshot; }
+  catch { dirty = true; }
+  if (!dirty) return true;
+  if (configConfirming) return false;
+  configConfirming = true;
   try {
-    const snapshot = modelPreferencesFormSnapshot();
-    if (snapshot === state.preferencesSnapshot) return showSettingsToast("未修改", "unchanged");
-    const form = JSON.parse(snapshot);
-    const [provider, modelId] = form.defaultModel.split("||");
-    await invoke("models.preferences", { defaultModel: { provider, modelId }, defaultThinkingLevel: form.defaultThinkingLevel, enabledModels: form.visibleModels.length === form.modelCount ? [] : form.visibleModels });
-    await Promise.all([loadModelCatalog(), loadBootstrap()]);
-    showSettingsToast("保存成功");
-  } catch (error) { showSettingsToast(error?.message || "保存失败", "error"); showError(error); }
+    const discard = await uiDialogs.confirm('自定义模型配置有未保存的修改，是否放弃？', {title:'未保存的模型配置',confirmText:'放弃修改'});
+    if (discard) {
+      state.modelsConfig = JSON.parse(state.modelsConfigSnapshot);
+      state.providerKey = Object.keys(state.modelsConfig.providers || {})[0] || null; state.modelIndex = 0;
+      renderConfigSelectors();
+    }
+    return discard;
+  } finally { configConfirming = false; }
 }
-  function setEnabledModels(models) { state.enabledModels = Array.isArray(models) ? models : []; }
+  function setEnabledModels(models, visibleModelKeys) { state.enabledModels = Array.isArray(models) ? models : []; state.visibleModelKeys = Array.isArray(visibleModelKeys) ? visibleModelKeys : null; }
   function applyAgentState(agentState) {
     if (Object.prototype.hasOwnProperty.call(agentState || {}, "model")) state.currentModel = validModel(agentState.model) ? { provider: agentState.model.provider, id: agentState.model.id } : null;
     if (agentState?.thinkingLevel) el.thinkingSelect.value = agentState.thinkingLevel;
     updateModelPickerButton();
   }
-  return { setEnabledModels, applyAgentState, resolveEnabledModels, switchModel, switchThinking, renderModels, renderModelPicker, updateModelPickerButton, renderThinking, loadModelsConfig, renderConfigSelectors, loadProviderForm, loadModelForm, clearProviderForm, clearModelForm, parseJsonField, numberOrUndefined, setSelectValue, commitModelForm, commitProviderForm, assignOrDelete, changeProviderConfig, changeModelConfig, addProviderConfig, deleteProviderConfig, addModelConfig, duplicateModelConfig, deleteModelConfig, saveModelsConfig, testConfiguredModel, loadModelCatalog, renderModelPreferences, supportedThinkingLevels, syncDefaultModelPreference, modelScopeMatches, updateModelVisibility, modelPreferencesFormSnapshot, saveModelPreferences };
+  return { setEnabledModels, applyAgentState, resolveEnabledModels, switchModel, switchThinking, renderModels, renderModelPicker, updateModelPickerButton, renderThinking, loadModelsConfig, renderConfigSelectors, loadProviderForm, loadModelForm, clearProviderForm, clearModelForm, parseJsonField, numberOrUndefined, setSelectValue, commitModelForm, commitProviderForm, assignOrDelete, changeProviderConfig, changeModelConfig, addProviderConfig, deleteProviderConfig, addModelConfig, duplicateModelConfig, deleteModelConfig, saveModelsConfig, testConfiguredModel, loadModelCatalog, supportedThinkingLevels, modelScopeMatches, canLeavePreferences, canLeaveModelConfig, hasPreferencesDraft, applyModelCatalog, syncModelCatalog };
 }

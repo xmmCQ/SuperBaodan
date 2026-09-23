@@ -23,8 +23,9 @@ test('冷启动：Agent或工作区卡住不阻塞每日内容，刷新仍可读
     assert.ok(await browser.evaluate("dayTasks.textContent.includes('冷启动事项')"));
   }
   await browser.navigate(`http://127.0.0.1:${fixture.port}/?fail=1`);
-  await browser.waitFor("dayTasks.textContent.includes('模拟首次读取失败')");
-  await browser.evaluate('dayTasks.querySelector("button").click()');
-  await browser.waitFor("dayTasks.querySelector('.task-card')");
+  await browser.waitFor("dayLoadMessage.textContent.includes('模拟首次读取失败')&&!dayLoadRetry.classList.contains('hidden')");
+  assert.equal(await browser.evaluate("dayTasks.textContent.includes('模拟首次读取失败')"),false);
+  await browser.evaluate('dayLoadRetry.click()');
+  await browser.waitFor("dayTasks.querySelector('.task-card')&&dailyRecordList.querySelector('.daily-record-card')");
   assert.equal(await browser.evaluate('dayReads'), 2);
 });

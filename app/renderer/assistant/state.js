@@ -11,9 +11,9 @@ export function createAssistantState() {
     },
     sessions: { sessions: [], currentSessionId: null },
     models: {
-      models: [], enabledModels: [], currentModel: null,
-      modelsConfig: null, modelsConfigSnapshot: null, catalog: null,
-      preferencesSnapshot: null, providerKey: null, modelIndex: 0,
+      models: [], enabledModels: [], visibleModelKeys: null, currentModel: null,
+      modelsConfig: null, modelsConfigSnapshot: null,
+      providerKey: null, modelIndex: 0,
     },
     auth: { activeLoginSource: null, secretProvider: null },
     skills: {

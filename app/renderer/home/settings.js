@@ -6,7 +6,7 @@ import { renderMarkdown, markdownBodyWithoutFrontmatter } from '../markdown-rend
 // Mount only the shared dialogs, never start/navigate to the assistant workspace.
 // A shadow root isolates their existing styles and IDs from the home page.
 export function createHomeSettings({ trigger, elements, invoke, agentClient, getWorkspace,
-  loadBootstrap, reading, showNotice }) {
+  loadBootstrap, reading, showNotice, onCatalogChanged }) {
   let panel, pending, opening = false;
   const showError = error => panel ? panel.settings.toast(error.message || String(error), 'error') : showNotice(error.message || String(error), true);
   async function initialize() {
@@ -37,8 +37,8 @@ export function createHomeSettings({ trigger, elements, invoke, agentClient, get
         closeButton: el.uiDialogClose, cancelButton: el.uiDialogCancel, confirmButton: el.uiDialogConfirm });
       panel = createSettingsPanel({ state: createAssistantState(), elements: el, invoke,
         command: agentClient.command, uiDialogs, showNotice, showError, loadBootstrap,
-        updateStateFromAgent: data => panel.models.applyAgentState(data), captureContext: agentClient.captureContext,
-        renderMarkdown, markdownBodyWithoutFrontmatter, getWorkspace, readingContainer: elements.chatMessages });
+        updateStateFromAgent: data => panel.models.applyAgentState(data), captureContext: agentClient.captureContext, capturePreferences: agentClient.captureWorkspace,
+        renderMarkdown, markdownBodyWithoutFrontmatter, getWorkspace, readingContainer: elements.chatMessages, onCatalogChanged });
       reading.dispose();
       el.settingsDialog.addEventListener('close', () => trigger.focus({ preventScroll: true }));
       return panel;
@@ -55,5 +55,5 @@ export function createHomeSettings({ trigger, elements, invoke, agentClient, get
     finally { opening = false; trigger.disabled = false; }
   }
   return { open, hasDraft: () => Boolean(panel?.projectPrompt.hasDraft()),
-    discard: () => panel?.projectPrompt.discard(), contextChanged: () => panel?.projectPrompt.contextChanged() };
+    syncModels: () => panel?.models.syncModelCatalog(), discard: () => panel?.projectPrompt.discard(), contextChanged: () => panel?.projectPrompt.contextChanged() };
 }

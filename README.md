@@ -6,7 +6,7 @@ Windows 个人工作台，集中管理日历、待办、每日记录、工作文
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/xmmCQ/SuperBaodan/releases/latest) 下载 `SuperBaodan.exe`，运行安装。
+从 [GitHub Releases](https://github.com/xmmCQ/SuperBaodan/releases/latest) 下载最新版 `SuperBaodan.exe`，运行安装。
 
 ![超级宝蛋首页](docs/screenshots/home.png)
 
@@ -57,7 +57,7 @@ Windows 个人工作台，集中管理日历、待办、每日记录、工作文
 
 ### 模型、提示词与 Skill
 
-- 搜索和选择模型，设置新对话默认模型、思考等级及可见范围；悬停可查看完整模型名称。
+- 搜索和选择模型，设置新对话默认模型、各模型思考等级及可见范围；悬停可查看完整模型名称。
 - 支持 ChatGPT Plus/Pro（Codex）等账号登录、API Key 和自定义模型配置。
 
 ![模型配置界面](docs/screenshots/model-settings.png)

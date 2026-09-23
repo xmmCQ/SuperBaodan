@@ -1,4 +1,6 @@
-import { loadPiSdk } from './pi-sdk-loader.mjs';
+import { loadPiSdk, loadThinkingCapabilities } from './pi-sdk-loader.mjs';
+import { ModelCatalog } from './model-catalog.mjs';
+import { isModelVisible, isVisibleInCatalog, modelKey, supportedThinkingLevels } from '../../shared/model-preferences.js';
 import { parseJsonc, redactSecrets, mergeSecretPlaceholders, validateAndNormalizeModelsConfig, validProviderId, VALID_THINKING_LEVELS } from './model-config.mjs';
 import { fault } from '../../shared/errors.js';
 import { createWorkspaceSettings } from './workspace-resources.mjs';
@@ -24,6 +26,14 @@ export class PiAdmin {
     this.maintenanceActive = false;
     this.loginInputs = new Map();
     this.activeLogins = new Map();
+    this.modelCatalog = new ModelCatalog({
+      file:path.join(agentDir,'model-catalog-status.json'),
+      createRuntime: options => this.createRuntime(options),
+      readCredentials: () => readCredentialFile(this.authPath),
+      thinkingCapabilities: () => loadThinkingCapabilities(this.env),
+      preferences: () => this.catalogPreferences(),
+      syncRuntime: async () => { await this.piRuntime?.host?.session?.modelRuntime?.refresh({allowNetwork:false}); },
+    });
   }
 
   async createRuntime(extra = {}) {
@@ -74,10 +84,11 @@ export class PiAdmin {
     return { oauthProviders, apiKeyProviders };
   }
 
-  assertMaintenanceAvailable() {
-    if (this.maintenanceActive) throw fault(409, "正在进行其他登录或模型配置操作");
+  assertMaintenanceAvailable(metadataOnly = false) {
+    if (metadataOnly && (this.piRuntime?.transitionCount || this.piRuntime?.stopping || this.piRuntime?.startPromise)) throw fault(409, '对话正在准备或切换，请等待完成');
+    if (this.maintenanceActive) throw fault(409, metadataOnly ? '正在进行其他维护操作，请等待完成' : "正在进行其他登录或模型配置操作");
     if (this.piRuntime?.state === "busy" || this.piRuntime?.busyReasons?.size || this.piRuntime?.pending?.size) {
-      throw fault(409, "宝蛋正在处理任务，请停止或等待任务完成后再修改登录和模型配置");
+      throw fault(409, metadataOnly ? '宝蛋正在处理任务，请等待完成后再刷新或保存模型偏好' : "宝蛋正在处理任务，请停止或等待任务完成后再修改登录和模型配置");
     }
   }
 
@@ -100,16 +111,17 @@ export class PiAdmin {
     return hadActiveLogin;
   }
 
-  async withMaintenance(operation) {
-    this.assertMaintenanceAvailable();
+  async withMaintenance(operation, { restart = true } = {}) {
+    this.assertMaintenanceAvailable(!restart);
     const run = async () => {
+      this.assertMaintenanceAvailable(!restart);
       this.maintenanceActive = true;
       const sessionPath = this.piRuntime?.activeSessionPath || null;
-      const shouldRestart = Boolean(this.piRuntime?.running || sessionPath);
+      const shouldRestart = restart && Boolean(this.piRuntime?.running || sessionPath);
       let result;
       let operationError;
       try {
-        if (this.piRuntime?.running) await this.piRuntime.stop("maintenance");
+        if (restart && this.piRuntime?.running) await this.piRuntime.stop("maintenance");
         result = await operation();
       } catch (error) {
         operationError = error;
@@ -260,72 +272,79 @@ export class PiAdmin {
   }
 
   async preferences() {
-    const { SettingsManager } = await loadPiSdk(this.env);
-    const settings = createWorkspaceSettings({ SettingsManager }, this.cwd, this.agentDir);
-    return { enabledModels: settings.getEnabledModels() || [] };
+    const live = this.piRuntime?.host?.session?.modelRuntime;
+    if (!live?.getAvailableSnapshot) {
+      const catalog = await this.catalog();
+      return { enabledModels: catalog.enabledModels, visibleModelKeys: catalog.visibleModelKeys };
+    }
+    const [preferences, metadata] = await Promise.all([this.catalogPreferences(),this.modelCatalog.metadata()]);
+    return {enabledModels:preferences.enabledModels,...this.modelCatalog.visibility(live.getAvailableSnapshot(),preferences,metadata)};
   }
 
-  async catalog() {
-    const [runtime, sdk] = await Promise.all([this.createRuntime(), loadPiSdk(this.env)]);
-    let available;
-    try { available = await runtime.getAvailable(undefined, { signal: AbortSignal.timeout(15_000) }); }
-    catch { available = runtime.getAvailableSnapshot(); }
-    const settings = createWorkspaceSettings(sdk, this.cwd, this.agentDir);
-    const models = [...available].map((model) => ({
-      provider: model.provider,
-      id: model.id,
-      name: model.name || model.id,
-      reasoning: Boolean(model.reasoning),
-      input: model.input || ["text"],
-      thinkingLevelMap: model.thinkingLevelMap || null,
-    })).sort((a, b) => `${a.provider}/${a.name}`.localeCompare(`${b.provider}/${b.name}`, undefined, { numeric: true }));
+  async createSettings() { return createWorkspaceSettings(await loadPiSdk(this.env), this.cwd, this.agentDir); }
+
+  async catalogPreferences() {
+    const settings = await this.createSettings();
     return {
-      models,
       defaultModel: settings.getDefaultProvider() && settings.getDefaultModel() ? { provider: settings.getDefaultProvider(), modelId: settings.getDefaultModel() } : null,
-      defaultThinkingLevel: settings.getDefaultThinkingLevel() || "off",
+      defaultThinkingLevel: settings.getModelThinkingLevel?.(settings.getDefaultProvider(),settings.getDefaultModel()) || settings.getDefaultThinkingLevel() || "off",
       modelThinkingLevels: settings.getAllModelThinkingLevels(),
       enabledModels: settings.getEnabledModels() || [],
     };
   }
 
-  async savePreferences(body) {
+  catalog() { return this.modelCatalog.read(); }
+  refreshCatalog(_args = {}, {signal} = {}) { return this.withMaintenance(() => this.modelCatalog.refresh({signal}), {restart:false}); }
+
+  async saveDisplayPreferences(body) {
+    if (Object.keys(body).some(key=>key!=='enabledModels') || !Array.isArray(body.enabledModels) || body.enabledModels.some(key=>typeof key!=='string'||!key.trim())) throw fault(400,'显示设置参数无效');
     return this.withMaintenance(async () => {
-      const { SettingsManager } = await loadPiSdk(this.env);
-      const settings = createWorkspaceSettings({ SettingsManager }, this.cwd, this.agentDir);
-      if (body.defaultModel == null) {
-        // Pi has no clear pair API; preserve current defaults when omitted.
-      } else {
-        const provider = String(body.defaultModel.provider || "").trim();
-        const modelId = String(body.defaultModel.modelId || "").trim();
-        if (!provider || !modelId) throw fault(400, "默认模型无效");
-        settings.setDefaultModelAndProvider(provider, modelId);
-      }
-      if (typeof body.defaultThinkingLevel === "string") {
-        if (!VALID_THINKING_LEVELS.has(body.defaultThinkingLevel)) throw fault(400, "默认思考等级无效");
-        settings.setDefaultThinkingLevel(body.defaultThinkingLevel);
-      }
-      if (Array.isArray(body.enabledModels)) settings.setEnabledModels(body.enabledModels.map(String).map((item) => item.trim()).filter(Boolean));
-      if (body.modelThinkingLevels && typeof body.modelThinkingLevels === "object") {
-        const existing = settings.getAllModelThinkingLevels();
-        for (const key of Object.keys(existing)) {
-          if (!Object.hasOwn(body.modelThinkingLevels, key)) {
-            const split = key.indexOf("/");
-            if (split > 0) settings.removeModelThinkingLevel(key.slice(0, split), key.slice(split + 1));
-          }
-        }
-        for (const [key, level] of Object.entries(body.modelThinkingLevels)) {
-          const split = key.indexOf("/");
-          if (split > 0 && typeof level === "string") {
-            if (!VALID_THINKING_LEVELS.has(level)) throw fault(400, `${key} 的思考等级无效`);
-            settings.setModelThinkingLevel(key.slice(0, split), key.slice(split + 1), level);
-          }
-        }
-      }
-      await settings.flush();
-      const errors = settings.drainErrors();
-      if (errors.length) throw new Error(errors.map((item) => item.error.message).join("; "));
-      return { saved: true };
-    });
+      const settings = await this.createSettings();
+      const enabledModels = [...new Set(body.enabledModels)];
+      const currentDefault = settings.getDefaultProvider() && settings.getDefaultModel() ? {provider:settings.getDefaultProvider(),id:settings.getDefaultModel()} : null;
+      if (currentDefault && !isModelVisible(currentDefault,enabledModels)) throw fault(400,'默认模型必须保持可见，请先保存新的默认模型');
+      this.assertPreferenceScope(settings,{enabledModels});
+      settings.setEnabledModels(enabledModels);
+      await this.flushPreferences(settings);
+      return this.catalog();
+    },{restart:false});
+  }
+
+  async saveDefaultPreferences(body) {
+    if (Object.keys(body).some(key=>!['defaultModel','defaultThinkingLevel'].includes(key))) throw fault(400,'默认设置不能包含显示设置');
+    return this.withMaintenance(async () => {
+      const catalog = await this.catalog();
+      const model = catalog.models.find(model=>modelKey(model)===modelKey(body.defaultModel));
+      if (!model || !isVisibleInCatalog(model,catalog)) throw fault(400,'请选择已显示且可用的默认模型');
+      if (!supportedThinkingLevels(model).includes(body.defaultThinkingLevel)) throw fault(400,'该模型不支持所选思考等级');
+      const settings = await this.createSettings();
+      // Recheck current visibility under the same maintenance lock.
+      if (!isModelVisible(model,settings.getEnabledModels() || []) && modelKey(model)!==modelKey({provider:settings.getDefaultProvider(),modelId:settings.getDefaultModel()})) throw fault(409,'显示设置已变化，请重新选择默认模型');
+      this.assertPreferenceScope(settings,{defaultProvider:model.provider,defaultModel:model.id,defaultThinkingLevel:body.defaultThinkingLevel});
+      const key = modelKey(model), projectLevel = settings.getProjectSettings?.().modelThinkingLevels?.[key];
+      if (projectLevel !== undefined && projectLevel !== body.defaultThinkingLevel) throw fault(409,'项目配置已覆盖该模型的思考等级，未修改任何偏好');
+      const override = settings.getAllModelThinkingLevels()[key];
+      settings.setDefaultModelAndProvider(model.provider,model.id);
+      settings.setDefaultThinkingLevel(body.defaultThinkingLevel);
+      // Existing per-model overrides take precedence in the SDK. Update only
+      // the explicitly selected model, otherwise the displayed default would lie.
+      if (override !== undefined && override !== body.defaultThinkingLevel) settings.setModelThinkingLevel(model.provider,model.id,body.defaultThinkingLevel);
+      await this.flushPreferences(settings);
+      return this.catalog();
+    },{restart:false});
+  }
+
+  assertPreferenceScope(settings, patch) {
+    const project = settings.getProjectSettings?.() || {};
+    for (const [key,value] of Object.entries(patch)) {
+      if (Object.hasOwn(project,key) && JSON.stringify(project[key]) !== JSON.stringify(value)) throw fault(409, `项目配置已覆盖 ${key}，请先调整项目配置；未修改任何偏好`);
+    }
+  }
+
+  async flushPreferences(settings) {
+    await settings.flush();
+    const errors = settings.drainErrors();
+    if (errors.length) throw new Error(errors.map(item=>item.error.message).join('; '));
   }
 
   async testModel(body) {

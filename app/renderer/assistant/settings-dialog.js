@@ -1,6 +1,7 @@
-export function createSettingsDialog({ elements: el, closeActiveLogin, loadAccounts, loadModelsConfig, loadModelCatalog, loadSkills, loadProjectPrompt = () => {}, canLeaveProjectPrompt = async () => true, showError }) {
+export function createSettingsDialog({ elements: el, closeActiveLogin, loadAccounts, loadModelsConfig, loadModelCatalog, loadSkills, loadProjectPrompt = () => {}, canLeaveProjectPrompt = async () => true, canLeavePreferences = async () => true, canLeaveModelConfig = async () => true, showError }) {
   let toastTimer;
   let currentTab = 'accounts';
+  const canLeave = () => currentTab === 'projectPrompt' ? canLeaveProjectPrompt() : currentTab === 'preferences' ? canLeavePreferences() : currentTab === 'custom' ? canLeaveModelConfig() : Promise.resolve(true);
 
   function open() {
     el.settingsDialog.showModal();
@@ -8,7 +9,7 @@ export function createSettingsDialog({ elements: el, closeActiveLogin, loadAccou
   }
 
   async function close() {
-    if (currentTab === 'projectPrompt' && !await canLeaveProjectPrompt()) return;
+    if (!await canLeave()) return;
     closeActiveLogin();
     clearTimeout(toastTimer);
     el.settingsToast.classList.add("hidden");
@@ -16,7 +17,7 @@ export function createSettingsDialog({ elements: el, closeActiveLogin, loadAccou
   }
 
   async function activateTab(name) {
-    if (name !== currentTab && currentTab === 'projectPrompt' && !await canLeaveProjectPrompt()) return;
+    if (name !== currentTab && !await canLeave()) return;
     currentTab = name;
     for (const button of el.settingsDialog.querySelectorAll("[data-settings-tab]")) button.classList.toggle("active", button.dataset.settingsTab === name);
     for (const tab of el.settingsDialog.querySelectorAll(".settings-tab")) tab.classList.remove("active");

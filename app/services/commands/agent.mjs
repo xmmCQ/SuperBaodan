@@ -49,6 +49,7 @@ export function registerAgentCommands(commands) {
         messages: messages?.messages || [],
         models: models?.models || [],
         enabledModels: preferences.enabledModels,
+        visibleModelKeys: preferences.visibleModelKeys,
         thinkingLevels: thinking?.levels || ['off'],
         sessions,
         workspace: context.publicWorkspace(workspace),

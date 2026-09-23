@@ -23,6 +23,7 @@ import { createRecordEditor } from "/home/record-editor.js?v=1";
 import { createHomeChat } from "/home/home-chat.js?v=3";
 import { createVSkills } from "/home/vskills.js?v=1";
 import { createHomeSettings } from './settings.js';
+import { createDayLoader } from './day-loader.js';
 
 const state = createHomeState(toLocalDate(new Date()));
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
@@ -69,10 +70,27 @@ const loadDashboardViews = async (...args) => {
   const [loaded] = await Promise.all([dashboard.loadDashboard(...args), dailyRecords.loadMonth(state.planner.month)]);
   return loaded;
 };
+const loadDayView = createDayLoader({
+  prepareTasks: date => dashboard.prepareDay(date),
+  prepareRecords: date => dailyRecords.prepareDate(date),
+  commitDate: date => { el.selectedDateTitle.textContent = formatChineseDate(date); },
+  setLoading(loading) {
+    state.planner.dayLoading = loading;
+    dayView.setLoading(loading);
+    if (loading) tasks.resetTaskDrag();
+    else {
+      state.planner.requestedDate = state.records.requestedDate = null;
+      calendar.renderCalendar();
+      dailyRecords.resumeSearch();
+    }
+  },
+  showNotice: dayView.showNotice,
+  retry: date => loadSelectedDay(date),
+});
 const loadSelectedDay = async (date) => {
   const monthChanged = date.slice(0, 7) !== state.planner.month;
-  const [loaded] = await Promise.all([dashboard.loadDay(date), dailyRecords.loadDate(date)]);
-  if (monthChanged) await dailyRecords.loadMonth(state.planner.month);
+  const loaded = await loadDayView(date);
+  if (loaded !== undefined && monthChanged && date === state.planner.selectedDate && date.slice(0, 7) === state.planner.month) await dailyRecords.loadMonth(state.planner.month);
   return loaded;
 };
 const calendar = createCalendar({
@@ -92,10 +110,9 @@ dashboard = createDashboard({
   renderCalendar: calendar.renderCalendar,
   renderOverdue: tasks.renderOverdue,
   renderLongTerm: tasks.renderLongTerm,
-  toast, formatChineseDate, loadingState,
+  toast,
   renderTaskList: tasks.renderTaskList,
   dayTaskMeta: tasks.dayTaskMeta,
-  emptyState,
   setTaskCount: dayView.setTaskCount,
 });
 const recordEditor = createRecordEditor({
@@ -106,7 +123,7 @@ const recordEditor = createRecordEditor({
 dailyRecords = createDailyRecords({
   state: state.records, elements: el, invoke, dayView, editor: recordEditor, renderMarkdown, toast, uiDialogs, escapeHtml,
   renderCalendar: calendar.renderCalendar,
-  getSelectedDate: () => state.planner.selectedDate,
+  getSelectedDate: () => state.planner.requestedDate || state.planner.selectedDate,
   getMonth: () => state.planner.month,
   navigateToDate: loadSelectedDay,
   getChatBusy: () => homeChat?.isBusy() || false,
@@ -119,7 +136,7 @@ homeChat = createHomeChat({
   closeVSkillDrawer: () => vskills?.closeVSkillDrawer(),
 });
 homeSettings = createHomeSettings({ trigger: el.homeSettingsButton, elements: el, invoke, agentClient,
-  getWorkspace: homeChat.workspace, loadBootstrap: homeChat.loadHomeChatBootstrap, reading, showNotice: toast });
+  getWorkspace: homeChat.workspace, loadBootstrap: homeChat.loadHomeChatBootstrap, reading, showNotice: toast, onCatalogChanged: homeChat.applyModelCatalog });
 historySearch = createSessionSearch({
   input: el.historySearchInput, results: el.historySearchResults, defaultList: el.chatHistoryList,
   search: sessionService.search, getWorkspaceId: currentWorkspaceId,
@@ -144,6 +161,7 @@ const agentEvents = createAgentEventStream({
   onEvent: (event) => {
     if (event.type === "workspace_changed" && !event.renamed) historySearch.reset();
     homeChat.handleHomeChatEvent(event);
+    if (event.type === 'models_changed') homeSettings.syncModels();
     if (event.type === 'workspace_changed') homeSettings.contextChanged();
   },
   onStatus: (status, detail) => {
@@ -195,13 +213,11 @@ function bindEvents() {
   el.nextMonth.addEventListener("click", () => tasks.changeMonth(1));
   el.todayButton.addEventListener("click", async () => {
     state.planner.month = state.planner.today.slice(0, 7);
-    state.planner.selectedDate = state.planner.today;
-    await loadDashboardViews();
-    await loadSelectedDay(state.planner.selectedDate);
+    await Promise.all([loadSelectedDay(state.planner.today), loadDashboardViews()]);
   });
   el.refreshButton.addEventListener("click", async () => {
     setIconBusy(el.refreshButton, true);
-    try { await loadDashboardViews(true); await loadSelectedDay(state.planner.selectedDate); }
+    try { await loadDashboardViews(true); await loadSelectedDay(state.planner.requestedDate || state.planner.selectedDate); }
     finally { setIconBusy(el.refreshButton, false); }
   });
   el.dayTasksTab.addEventListener("click", () => dayView.setActive("tasks"));

@@ -39,7 +39,7 @@ function renderCalendar() {
       "calendar-day",
       !isCurrentMonth ? "outside" : "",
       dateString === state.today ? "today" : "",
-      dateString === state.selectedDate ? "selected" : "",
+      dateString === (state.requestedDate || state.selectedDate) ? "selected" : "",
       pendingCount ? "has-pending" : "",
       recordCount ? "has-records" : "",
     ].filter(Boolean).join(" ");

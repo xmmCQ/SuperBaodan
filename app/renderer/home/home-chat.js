@@ -26,7 +26,7 @@ export function createHomeChat({
     command: (...args) => agentClient.command(...args), uiDialogs,
     showNotice: message => toast(message), showError: error => toast(error.message, true),
     updateStateFromAgent: data => modelControls.applyAgentState(data),
-    captureContext: agentClient.captureContext,
+    captureContext: agentClient.captureContext, capturePreferences: agentClient.captureWorkspace,
   }) : null;
   if (modelControls) {
     bindModelPicker({ button: el.modelPickerButton, panel: el.modelPickerPanel, filter: el.modelFilter, render: modelControls.renderModelPicker });
@@ -95,7 +95,7 @@ const loadHomeChatBootstrap = createBootstrapLoader({ client: agentClient, getWo
     if (modelControls) {
       const enabled = await modelControls.resolveEnabledModels(data.enabledModels);
       if (!current()) return;
-      modelControls.setEnabledModels(enabled);
+      modelControls.setEnabledModels(enabled,data.visibleModelKeys);
       modelControls.renderModels(data.models || [], data.state?.model);
       modelControls.renderThinking(data.thinkingLevels || ['off'], data.state?.thinkingLevel || 'off');
     }
@@ -128,6 +128,7 @@ async function syncHomeChatMessages() {
   } catch (error) { if (!error.staleResponse) { snapshotRecovery.recovered(); console.warn(error); } }
 }
 function handleHomeChatEvent(event) {
+  if (event.type === 'models_changed') { void modelControls?.syncModelCatalog(); return; }
   const agentState = agentClient.applyEvent(event);
   snapshotRecovery.event(event);
   if (event.type === "extension_error") toast(event.error || "扩展执行失败", true);
@@ -515,5 +516,5 @@ function scrollChat(force = false) {
   function setWorkspace(workspace) { state.workspace = workspace; }
   function workspace() { return state.workspace; }
   function isBusy() { return state.chatBusy; }
-  return { loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToChatBottom = false; }, setWorkspace, workspace, isBusy, warmupAgent, loadAgentStatus, loadHomeChatBootstrap, syncHomeChatMessages, handleHomeChatEvent, renderChatMessages, openChatHistory, closeChatHistory, switchHistoryTab, handleHistoryClick, handleHistoryRenameSubmit, activateHistorySession, sendChat, newHomeChat, stopHomeChat, openAssistantWorkspace, appendMessage, setAgentStatus, scheduleHomeWorkspaceReload, autoResizeInput, scrollChat };
+  return { applyModelCatalog: catalog => modelControls?.applyModelCatalog(catalog), loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToChatBottom = false; }, setWorkspace, workspace, isBusy, warmupAgent, loadAgentStatus, loadHomeChatBootstrap, syncHomeChatMessages, handleHomeChatEvent, renderChatMessages, openChatHistory, closeChatHistory, switchHistoryTab, handleHistoryClick, handleHistoryRenameSubmit, activateHistorySession, sendChat, newHomeChat, stopHomeChat, openAssistantWorkspace, appendMessage, setAgentStatus, scheduleHomeWorkspaceReload, autoResizeInput, scrollChat };
 }

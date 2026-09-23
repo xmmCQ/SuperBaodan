@@ -127,7 +127,7 @@
     <div class="dialog-head"><b>设置</b><button id="closeSettings" class="icon-action tooltip-left" type="button" aria-label="关闭设置" data-tooltip="关闭"><svg aria-hidden="true"><use href="/icons.svg#x"></use></svg></button></div>
     <nav class="settings-tabs">
       <button data-settings-tab="accounts" class="active">模型配置</button>
-      <button data-settings-tab="preferences">新对话默认设置</button>
+      <button data-settings-tab="preferences">模型偏好</button>
       <button data-settings-tab="projectPrompt">项目提示词</button>
       <button data-settings-tab="skills">技能管理</button>
       <button data-settings-tab="reading">阅读设置</button>
@@ -207,21 +207,23 @@
       <div class="dialog-actions"><button id="reloadModelsConfig">撤销更改</button><button id="saveModelsConfig" class="primary">保存配置</button></div>
     </section>
     <section id="preferencesTab" class="settings-tab">
-      <div class="field-grid preferences-fields">
-        <label><span>默认模型</span><select id="defaultModelSelect"></select></label>
-        <label><span>思考等级</span><select id="defaultThinking"></select></label>
-      </div>
-      <p class="settings-scope-note">仅对新对话生效，不影响当前对话。</p>
-      <div class="model-preferences-heading">
-        <h3>模型选择器中显示的模型</h3>
-        <div class="model-selection-actions">
-          <button id="selectAllModels" type="button">全选</button>
-          <button id="invertModels" type="button">反选</button>
+      <section class="model-preference-section">
+        <div class="model-preferences-heading"><h3>可用模型</h3><button id="refreshModelCatalog" type="button">刷新模型目录</button></div>
+        <div class="model-refresh-meta"><span id="modelRefreshStatus" role="status">尚未手动刷新</span><span id="modelRefreshTime">最近成功更新：暂无</span></div>
+        <details id="modelRefreshDetails" class="hidden"><summary>供应商刷新详情</summary><div id="modelRefreshResults"></div></details>
+        <div class="model-selection-actions model-search-row"><input id="modelPreferencesSearch" type="search" placeholder="搜索模型或供应商" aria-label="搜索可用模型"><button id="selectAllModels" type="button">全选</button><button id="invertModels" type="button">反选</button><button id="saveModelDisplay" class="primary" type="button" disabled>保存显示设置</button></div>
+        <p class="muted model-display-note">勾选后在聊天模型选择器中显示。默认模型必须保持可见；隐藏模型不会切换当前会话。<span id="modelDisplayPolicy"></span><span id="modelDisplayDirty" class="model-dirty-note" role="status"></span></p>
+        <div id="modelPreferencesList" class="model-preferences-list"></div>
+      </section>
+      <section class="model-preference-section model-default-section">
+        <h3>新对话默认设置</h3>
+        <div class="field-grid preferences-fields">
+          <label><span>默认模型</span><select id="defaultModelSelect"></select></label>
+          <label><span>默认思考等级</span><select id="defaultThinking"></select></label>
+          <button id="saveModelDefaults" class="primary" type="button" disabled>保存默认设置</button>
         </div>
-      </div>
-      <p class="muted">默认模型必须保持可见；取消勾选可隐藏其他不常用模型。</p>
-      <div id="modelPreferencesList" class="model-preferences-list"></div>
-      <div class="dialog-actions"><button id="savePreferences" class="primary">保存新对话设置</button></div>
+        <p class="settings-scope-note">仅影响新建对话，不修改已有会话。先保存显示设置，再选择新显示的模型作为默认值。<span id="modelDefaultsDirty" class="model-dirty-note" role="status"></span></p>
+      </section>
     </section>
     <section id="skillsTab" class="settings-tab skills-tab">
       <div class="skills-toolbar">

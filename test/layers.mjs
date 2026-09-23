@@ -3,7 +3,7 @@
 export const layers = {
   unit: [
     'agent-commands', 'auth-login-switch', 'auth-popup', 'bootstrap-races',
-    'chat-scroll-follow', 'desktop-backend-manager', 'desktop-reliability',
+    'chat-scroll-follow', 'day-loader', 'desktop-backend-manager', 'desktop-reliability',
     'desktop-shell', 'desktop-tray', 'installer-upgrade', 'ipc-policy',
     'markdown-renderer', 'model-config-schema', 'model-controls-visibility',
     'modularization', 'pi-admin', 'product-constraints', 'reading-resize',
@@ -14,7 +14,7 @@ export const layers = {
   integration: [
     'app-data-context', 'atomic-file', 'daily-record-api', 'daily-record-manager',
     'desktop-log-writer', 'holiday-calendar', 'large-agent-events',
-    'pi-admin-maintenance', 'pi-sdk-api', 'pi-sdk-integration', 'pi-sdk-switch',
+    'model-preferences', 'pi-admin-maintenance', 'pi-sdk-api', 'pi-sdk-integration', 'pi-sdk-switch',
     'pi-sdk', 'pi-session-store', 'review-regressions', 'runtime-turn-files',
     'service-process', 'session-model', 'session-sync-races', 'session-text-search',
     'shell-output-guard', 'skill-cli', 'skill-collisions', 'skill-directory-cache',
@@ -26,9 +26,9 @@ export const layers = {
   ],
   browser: [
     'assistant-theme', 'browser-smoke', 'card-order', 'chat-lazy-load',
-    'composer-controls', 'conversation-directory', 'desktop-page',
+    'composer-controls', 'conversation-directory', 'day-loading-browser', 'desktop-page',
     'execution-process', 'glass-surfaces', 'holiday-browser', 'holiday-cache',
-    'home-cold-start', 'home-responsive', 'home-settings', 'longterm-card-order',
+    'home-cold-start', 'home-responsive', 'home-settings', 'longterm-card-order', 'model-preferences-browser',
     'project-prompt', 'prompt-images', 'reading-and-file-panel', 'reply-actions',
     'session-search-browser', 'settings-layout', 'settings-providers', 'sidebar-resize',
     'skill-collisions-browser', 'skill-editor-browser', 'skill-transfer-browser', 'task-longterm-browser',

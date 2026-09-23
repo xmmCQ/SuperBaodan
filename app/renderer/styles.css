@@ -72,6 +72,11 @@ html.app-loading .app-shell { visibility: hidden; opacity: 0; }
 .count-pill.danger { color: var(--ui-danger); background: var(--coral-soft); }
 .count-pill.violet { color: var(--green-deep); background: var(--green-pale); }
 .day-heading { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.day-caption, .day-load-status { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.day-caption > .eyebrow { flex: none; }
+.day-load-status { color: var(--ui-secondary); font-size: var(--ui-meta); }
+#dayLoadMessage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dayLoadRetry { flex: none; min-height: 32px; padding: 0 6px; border: 0; border-radius: 8px; color: var(--ink); background: transparent; font: inherit; cursor: pointer; }
 .day-title-row { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; }
 #selectedDateTitle { flex: none; margin-top: 0; white-space: nowrap; font-size: var(--ui-panel-title); }
 .day-heading-actions { flex: none; display: flex; align-items: center; gap: 5px; white-space: nowrap; }

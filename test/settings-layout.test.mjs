@@ -90,6 +90,9 @@ test('新对话默认设置并排紧凑展示，提示无背景，模型悬停�
   assert.equal(layout.sameRow,true); assert.equal(layout.height,36); assert.equal(layout.thinkingWidth,160);
   assert.equal(layout.separate,true); assert.equal(layout.title,layout.name);
   assert.equal(layout.background,'rgba(0, 0, 0, 0)'); assert.equal(layout.noteBelow,true);
+  assert.ok(await browser.evaluate(`(()=>{const display=saveModelDisplay.getBoundingClientRect(),search=modelPreferencesSearch.getBoundingClientRect(),save=saveModelDefaults.getBoundingClientRect(),model=defaultModelSelect.getBoundingClientRect(),thinking=defaultThinking.getBoundingClientRect();return saveModelDisplay.parentElement.classList.contains('model-search-row')&&Math.abs(display.top-search.top)<1&&display.left>invertModels.getBoundingClientRect().right&&display.height===36&&save.height===36&&Math.abs(save.bottom-model.bottom)<1&&Math.abs(save.bottom-thinking.bottom)<1&&save.left>thinking.right})()`));
+  const compact=await browser.evaluate(`(()=>{const list=modelPreferencesList,row=list.querySelector('.preference-row'),heading=list.querySelector('h4'),lower=document.querySelector('.model-default-section');const top=lower.getBoundingClientRect().top;for(let i=0;i<30;i++)list.append(row.cloneNode(true));return {height:row.getBoundingClientRect().height,body:getComputedStyle(row.querySelector('b')).fontSize,meta:getComputedStyle(row.querySelector('small')).fontSize,provider:getComputedStyle(heading).fontSize,scroll:list.scrollHeight>list.clientHeight,kept:Math.abs(lower.getBoundingClientRect().top-top)<165,max:list.getBoundingClientRect().height}})()`);
+  assert.ok(compact.height>=36&&compact.height<=40);assert.equal(compact.body,'14px');assert.equal(compact.meta,'12px');assert.equal(compact.provider,'12px');assert.ok(compact.scroll&&compact.max<=200&&compact.kept);
   assert.deepEqual(browser.issues, []);
 });
 

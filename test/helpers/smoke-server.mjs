@@ -60,6 +60,8 @@ export async function createSmokeServer({ appRoot = path.join(ROOT, 'app') } = {
 async function handle(req, res, state) {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    const modelCommand = ({'GET /api/models/catalog':'models.catalog','POST /api/models/catalog/refresh':'models.refresh','PUT /api/models/preferences/display':'models.saveDisplay','PUT /api/models/preferences/defaults':'models.saveDefaults'})[`${req.method} ${url.pathname}`];
+    if (modelCommand && state.modelCommand) return json(res,200,await state.modelCommand(modelCommand,await readJson(req)));
     if (req.method === "GET" && url.pathname === "/api/health") return json(res, 200, { ok: true, assistantInstalled: true, assistantRunning: true, assistantState: "running", workspace: workspace(), today: TODAY });
     if (req.method === 'GET' && url.pathname === '/api/holidays') {
       const year = Number(url.searchParams.get('year'));
@@ -142,7 +144,7 @@ function agentState(state) {
   return { sessionId: active?.id || null, sessionFile: active?.path || null, isStreaming: false, ...state.sessionSettings.get(active?.id), contextUsage: { percent: 12 } };
 }
 function modelCatalog(state) { return state.modelCatalog || { models: [{ provider: "openai-codex", id: "gpt-test", name: "GPT Test", reasoning: true }], enabledModels: [], defaultModel: { provider: "openai-codex", modelId: "gpt-test" }, defaultThinkingLevel: "medium" }; }
-function bootstrap(state) { return { state: agentState(state), messages: state.messages.get(state.activeSessionId) || [], models: modelCatalog(state).models, enabledModels: modelCatalog(state).enabledModels, thinkingLevels: ["off", "medium", "high"], sessions: state.sessions, workspace: workspace(), workspaces: workspaceList(), turnFiles: { involved: [], modified: [] } }; }
+function bootstrap(state) { return { state: agentState(state), messages: state.messages.get(state.activeSessionId) || [], models: modelCatalog(state).models, enabledModels: modelCatalog(state).enabledModels, visibleModelKeys: modelCatalog(state).visibleModelKeys, thinkingLevels: ["off", "medium", "high"], sessions: state.sessions, workspace: workspace(), workspaces: workspaceList(), turnFiles: { involved: [], modified: [] } }; }
 
 function dashboard(state) {
   return { ...buildDashboard(state.tasks, { today: TODAY }), updatedAt: revision(state), stale: false, warning: null };

@@ -1,3 +1,4 @@
+import { fault } from '../../shared/errors.js';
 
 export function registerModelCommands(commands) {
   commands.set("models.read", async (args, context) => {
@@ -12,7 +13,13 @@ export function registerModelCommands(commands) {
   commands.set("models.catalog", async (args, context) => {
     return await context.piAdmin.catalog();
   });
-  commands.set("models.preferences", async (args, context) => {
-    return { ok: true, ...(await context.piAdmin.savePreferences(args)) };
-  });
+  for (const [command, method] of [['models.refresh','refreshCatalog'],['models.saveDisplay','saveDisplayPreferences'],['models.saveDefaults','saveDefaultPreferences']]) {
+    commands.set(command, async (args, context, signal) => {
+      if (context.workspaceSwitching || context.shuttingDown) throw fault(409, '工作区正在切换或服务正在退出，请稍后重试');
+      const admin = context.piAdmin;
+      const result = await admin[method](args,{signal});
+      if (context.piAdmin === admin) context.emitAgentEvent?.({type:'models_changed'});
+      return {ok:true,...result};
+    });
+  }
 }
