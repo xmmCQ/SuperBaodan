@@ -7,7 +7,7 @@ const MANAGED_ENV_KEYS = [
   "SUPER_BAODAN_VSKILL_FILE", "SUPER_BAODAN_DAILY_RECORD_FILE",
   "SUPER_BAODAN_WORKSPACE_FILE", "SUPER_BAODAN_DESKTOP_INSTANCE_ID",
   "SUPER_BAODAN_DESKTOP_OWNER_ID", "SUPER_BAODAN_DESKTOP_RUN_ID",
-  "SUPER_BAODAN_DESKTOP_CONTROLLED", "ELECTRON_RUN_AS_NODE",
+  "SUPER_BAODAN_DESKTOP_CONTROLLED", "ELECTRON_RUN_AS_NODE", "SUPER_BAODAN_PI_PACKAGE",
 ];
 
 export function resolveDesktopConfig({ app, root, env = process.env }) {
@@ -28,6 +28,8 @@ export function resolveDesktopConfig({ app, root, env = process.env }) {
     userDataDir: desktopRoot,
     dataRoot,
     nodePath,
+    supervise: true,
+    piPackagePath: env.SUPER_BAODAN_PI_PACKAGE ? path.resolve(env.SUPER_BAODAN_PI_PACKAGE) : packaged ? path.join(root,'node_modules','@earendil-works','pi-coding-agent') : null,
     piAgentDir: useExistingConfig && env.PI_CODING_AGENT_DIR
       ? path.resolve(env.PI_CODING_AGENT_DIR)
       : path.join(dataRoot, "pi-agent"),
@@ -51,6 +53,8 @@ export function createBackendEnvironment(config, runId, source = process.env) {
     SUPER_BAODAN_DESKTOP_CONTROLLED: "1",
     PI_CODING_AGENT_DIR: config.piAgentDir,
   });
+  if (config.piPackagePath) env.SUPER_BAODAN_PI_PACKAGE = config.piPackagePath;
+  else if (!config.packaged && source.SUPER_BAODAN_PI_PACKAGE) env.SUPER_BAODAN_PI_PACKAGE = source.SUPER_BAODAN_PI_PACKAGE;
   if (config.nodePath === process.execPath) env.ELECTRON_RUN_AS_NODE = "1";
   return env;
 }

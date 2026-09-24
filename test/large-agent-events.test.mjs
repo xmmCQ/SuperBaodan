@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { UiEventPayloads } from '../app/services/ui-event-payloads.mjs';
 import { createAgentEventStream } from '../app/renderer/core/event-stream.js';
-import { createRuntimeContext } from '../app/services/runtime-context.mjs';
-import { createServerApplication } from './helpers/command-http-fixture.mjs';
+import { createAgentContext, agentCommands } from './helpers/agent-context.mjs';
+import { createServerApplication as createCommandFixture } from './helpers/command-http-fixture.mjs';
+const createServerApplication = context => createCommandFixture(context,agentCommands(context));
 import { MAX_BROWSER_EVENT_BYTES } from '../app/services/domain/pi-sdk-ui.mjs';
 import { sdkHarness, deferred, wait } from './helpers/fake-sdk-host.mjs';
 
@@ -18,11 +19,10 @@ class Response extends EventEmitter {
 
 async function contextHarness(t, { start = true, ...options } = {}) {
   const h = await sdkHarness(options);
-  const c = await createRuntimeContext({ workspaceDir: h.temp.resolve('workspace'), piAgentDir: h.temp.resolve('agent'), piSessionDir: h.temp.resolve('sessions'), backupDir: h.temp.resolve('backups'), todoFile: h.temp.resolve('todo.md'), vskillFile: h.temp.resolve('vskills.json'), dailyRecordFile: h.temp.resolve('records.json'), workspaceFile: h.temp.resolve('workspaces.json'), host: '127.0.0.1', port: 0 });
-  c.piRuntime = h.runtime; h.runtime.on('event', event => c.broadcastAgentEvent(event));
+  const c = await createAgentContext({ workspaceDir: h.temp.resolve('workspace'), piAgentDir: h.temp.resolve('agent'), piSessionDir: h.temp.resolve('sessions'), backupDir: h.temp.resolve('backups'), todoFile: h.temp.resolve('todo.md'), vskillFile: h.temp.resolve('vskills.json'), dailyRecordFile: h.temp.resolve('records.json'), workspaceFile: h.temp.resolve('workspaces.json'), host: '127.0.0.1', port: 0 },{createRuntime:()=>h.runtime,emit:(topic,event)=>c?.emitEvent?.(topic,event)});
   const sinks = [];
   c.emitEvent = (topic, event) => { if (topic === 'agent') for (const sink of sinks) sink.write(`data: ${JSON.stringify(event)}\n\n`); };
-  c.captureEvents = (_unused, sink) => { sinks.push(sink); for (const event of c.agentConnection()) sink.write(`data: ${JSON.stringify(event)}\n\n`); };
+  c.captureEvents = (_unused, sink) => { sinks.push(sink); for (const event of [{type:'connected',workspace:c.activeWorkspace},...c.status().pendingUi]) sink.write(`data: ${JSON.stringify(event)}\n\n`); };
 
   t.after(async () => { c.uiEventPayloads.clear(); c.piAdmin.close(); await h.cleanup(); });
   if (start) await h.runtime.start();

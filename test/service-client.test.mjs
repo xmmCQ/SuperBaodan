@@ -8,7 +8,7 @@ function fixture() {
   backend.state = 'running';
   backend.currentRun = { id: 'run-1', child: { connected: true, send(message, callback) { sent.push(message); callback?.(); } } };
   const client = new ServiceClient(backend);
-  const reply = (message, value, run = backend.currentRun) => backend.emit('message', { run, message: { type: 'result', id: message.id, value } });
+  const reply = (message, value, run = backend.currentRun) => backend.emit('message', { run, message: { v:1,runId:run.id,name:message.name,type: 'result', id: message.id, value } });
   return { backend, sent, client, reply };
 }
 test('IPC并发响应按请求ID匹配，旧实例消息不能完成当前请求', async () => {

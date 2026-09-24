@@ -1,5 +1,5 @@
 import { fault } from '../../shared/errors.js';
-import { lstat, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, opendir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 export const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 export const MAX_BINARY_PREVIEW_BYTES = 12 * 1024 * 1024;
@@ -20,9 +20,21 @@ const IMAGE_MIME = new Map([
   [".webp", "image/webp"], [".bmp", "image/bmp"],
 ]);
 
+export async function normalizeWorkspaceToolPath(root,input,rootReal = null) {
+  if (typeof input !== 'string' || !input.trim() || input.includes('\0')) return null;
+  rootReal ||= await realpath(root);
+  const raw=input.trim(),candidate=path.isAbsolute(raw)||path.win32.isAbsolute(raw)?path.resolve(raw):resolveLexically(root,raw);
+  assertInside(candidate,root);let ancestor=candidate;
+  while(true){
+    try{const actual=await realpath(ancestor);assertInside(actual,rootReal);const final=path.resolve(actual,path.relative(ancestor,candidate));assertInside(final,rootReal);return toRelative(rootReal,final);}
+    catch(error){if(error.statusCode||error.code!=='ENOENT')throw error;const parent=path.dirname(ancestor);if(parent===ancestor)return null;ancestor=parent;}
+  }
+}
+
 export class WorkspaceService {
-  constructor(root) {
+  constructor(root, {openDirectory = opendir} = {}) {
     this.root = path.resolve(root);
+    this.openDirectory = openDirectory;
     this.rootReal = null;
   }
 
@@ -45,32 +57,7 @@ export class WorkspaceService {
     return { absolute: resolved, relative: toRelative(rootReal, resolved), stat: info };
   }
 
-  async normalizeToolPath(input) {
-    if (typeof input !== "string" || !input.trim() || input.includes("\0")) return null;
-    const rootReal = this.rootReal || await realpath(this.root);
-    const raw = input.trim();
-    const candidate = path.isAbsolute(raw) || path.win32.isAbsolute(raw)
-      ? path.resolve(raw)
-      : resolveLexically(this.root, raw);
-    assertInside(candidate, this.root);
-    let ancestor = candidate;
-    while (true) {
-      try {
-        const ancestorReal = await realpath(ancestor);
-        assertInside(ancestorReal, rootReal);
-        const suffix = path.relative(ancestor, candidate);
-        const finalPath = path.resolve(ancestorReal, suffix);
-        assertInside(finalPath, rootReal);
-        return toRelative(rootReal, finalPath);
-      } catch (error) {
-        if (error.statusCode) throw error;
-        if (error.code !== "ENOENT") throw error;
-        const parent = path.dirname(ancestor);
-        if (parent === ancestor) return null;
-        ancestor = parent;
-      }
-    }
-  }
+  normalizeToolPath(input) { return normalizeWorkspaceToolPath(this.root,input,this.rootReal); }
 
   async tree(relativePath = "", depth = 3) {
     const root = await this.resolveExisting(relativePath, "directory");
@@ -103,7 +90,9 @@ export class WorkspaceService {
     return { path: root.relative, entries: await visit(root.absolute, 1), truncated: count > MAX_TREE_ENTRIES };
   }
 
-  async search(query) {
+  async search(query, {signal} = {}) {
+    const check = () => { if (signal?.aborted) throw fault(499, '文件搜索已取消'); };
+    check();
     const needle = String(query || "").trim().toLocaleLowerCase();
     if (!needle) return [];
     if (needle.length > 200) throw fault(400, "搜索内容过长");
@@ -111,21 +100,27 @@ export class WorkspaceService {
     const queue = [this.rootReal || await realpath(this.root)];
     let inspected = 0;
     while (queue.length && results.length < MAX_SEARCH_RESULTS && inspected < MAX_TREE_ENTRIES * 5) {
+      check();
       const directory = queue.shift();
-      for (const entry of await readdir(directory, { withFileTypes: true })) {
-        inspected += 1;
-        if (entry.isSymbolicLink()) continue;
-        const full = path.join(directory, entry.name);
-        if (entry.isDirectory()) {
-          if (toRelative(this.rootReal, full).toLowerCase() !== 'baodanpark') queue.push(full);
+      const entries = await this.openDirectory(directory);
+      try {
+        while (inspected < MAX_TREE_ENTRIES * 5 && results.length < MAX_SEARCH_RESULTS) {
+          check();
+          const entry = await entries.read();
+          check(); if (!entry) break;
+          inspected += 1;
+          if (entry.isSymbolicLink()) continue;
+          const full = path.join(directory, entry.name);
+          if (entry.isDirectory()) {
+            if (toRelative(this.rootReal, full).toLowerCase() !== 'baodanpark') queue.push(full);
+          } else if (entry.isFile() && entry.name.toLocaleLowerCase().includes(needle)) {
+            const info = await lstat(full); check();
+            results.push({name:entry.name,path:toRelative(this.rootReal,full),size:info.size,previewable:Boolean(previewType(full,info.size))});
+          }
         }
-        else if (entry.isFile() && entry.name.toLocaleLowerCase().includes(needle)) {
-          const info = await lstat(full);
-          results.push({ name: entry.name, path: toRelative(this.rootReal, full), size: info.size, previewable: Boolean(previewType(full, info.size)) });
-          if (results.length >= MAX_SEARCH_RESULTS) break;
-        }
-      }
+      } finally { await entries.close(); }
     }
+    check();
     return results;
   }
 

@@ -4,6 +4,7 @@ import { taskKind, validateTaskTimes } from '../../app/shared/task-fields.js';
 import { listenOnSafePort } from './listen.mjs';
 import { WorkApps } from '../../app/services/domain/work-apps.mjs';
 import { WorkDocuments } from '../../app/services/domain/work-documents.mjs';
+import { prepareWorkspace } from '../../app/services/domain/workspace-layout.mjs';
 import { readProjectPrompt, saveProjectPrompt } from '../../app/services/domain/project-prompt.mjs';
 import { readFile, rename } from "node:fs/promises";
 import path from "node:path";
@@ -18,6 +19,7 @@ const TODAY = "2026-09-04";
 
 export async function createSmokeServer({ appRoot = path.join(ROOT, 'app') } = {}) {
   const temp = await createTempProject("super-baodan-browser-smoke-");
+  await prepareWorkspace(temp.root); // UI fixture represents an already prepared Agent workspace.
   const state = {
     revision: 1,
     projectRoot: temp.root,

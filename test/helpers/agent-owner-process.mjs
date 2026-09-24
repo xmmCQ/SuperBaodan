@@ -1,0 +1,16 @@
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { BackendManager } from '../../app/main/backend-manager.mjs';
+import { AgentProcessManager } from '../../app/main/agent-process-manager.mjs';
+import { ServiceBroker } from '../../app/main/service-broker.mjs';
+import { ServiceClient } from '../../app/main/service-client.mjs';
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const config={root,dataRoot:process.env.SB_TEST_ROOT,nodePath:process.execPath,piAgentDir:path.join(process.env.SB_TEST_ROOT,'agent'),supervise:true,agentEntry:path.join(root,'test/helpers/fake-agent-process.mjs')};
+const mode=process.argv[2];
+const dependencies=role=>({spawnProcess:(...args)=>{const child=spawn(...args);if(mode===`startup-${role}`)process.send({type:'starting',pid:child.pid});return child;}});
+const local=new BackendManager(config,dependencies('local')),agent=new AgentProcessManager(config,dependencies('agent')),broker=new ServiceBroker(local,agent),client=new ServiceClient(local);
+process.on('message',async message=>{if(message==='exit'){await broker.stop(8000);await broker.forceStop();process.exit(0);}});
+await local.start();await client.invoke('agent.start');
+client.on('event',({event})=>{if(event.type==='fixture_child')process.send({type:'ready',local:local.currentRun.child.pid,agent:agent.currentRun.child.pid,tool:event.pid});});
+void client.invoke('models.catalog',{fixture:'spawn-block'}).catch(()=>{});

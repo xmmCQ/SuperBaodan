@@ -28,6 +28,7 @@ export class PiAdmin {
     this.activeLogins = new Map();
     this.modelCatalog = new ModelCatalog({
       file:path.join(agentDir,'model-catalog-status.json'),
+      inputFiles:[this.authPath,this.modelsPath,this.modelsStorePath],
       createRuntime: options => this.createRuntime(options),
       readCredentials: () => readCredentialFile(this.authPath),
       thinkingCapabilities: () => loadThinkingCapabilities(this.env),

@@ -24,6 +24,8 @@ import { createHomeChat } from "/home/home-chat.js?v=3";
 import { createVSkills } from "/home/vskills.js?v=1";
 import { createHomeSettings } from './settings.js';
 import { createDayLoader } from './day-loader.js';
+import { createAgentRecovery } from '../core/agent-ui.js';
+import { createModelCatalogSync } from '../core/model-catalog-sync.js';
 
 const state = createHomeState(toLocalDate(new Date()));
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
@@ -55,6 +57,7 @@ const workspaceSwitcher = createWorkspaceSwitcher({
     homeSettings?.contextChanged();
     homeChat?.scheduleHomeWorkspaceReload(`已切换到工作区：${workspace.name}`);
   },
+  onActivationFailed: () => homeChat?.syncHomeChatMessages(),
   onError: (error) => toast(error?.message || String(error), true),
 });
 const currentWorkspaceId = () => homeChat?.workspace()?.id || null;
@@ -156,12 +159,15 @@ vskills = createVSkills({
   closeChatHistory: homeChat.closeChatHistory,
 });
 
+const modelCatalogSync = createModelCatalogSync({scope:currentWorkspaceId,capture:agentClient.captureWorkspace,read:()=>invoke('models.catalog',{}),apply:homeSettings.applyModelCatalog,onError:error=>toast(error.message,true)});
+const agentRecovery=createAgentRecovery({mount:el.chatForm.parentElement,client:agentClient,reload:homeChat.loadHomeChatBootstrap,notice:toast});
 const agentEvents = createAgentEventStream({
   captureContext: () => agentClient.captureContext({ allowTransition: true }),
   onEvent: (event) => {
+    agentRecovery.event(event);
+    if (event.type === 'models_changed') { void modelCatalogSync.receive(event); return; }
     if (event.type === "workspace_changed" && !event.renamed) historySearch.reset();
     homeChat.handleHomeChatEvent(event);
-    if (event.type === 'models_changed') homeSettings.syncModels();
     if (event.type === 'workspace_changed') homeSettings.contextChanged();
   },
   onStatus: (status, detail) => {

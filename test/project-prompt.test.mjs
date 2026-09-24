@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createTempProject } from './helpers/temp-project.mjs';
+import { prepareWorkspace } from '../app/services/domain/workspace-layout.mjs';
 import { readProjectPrompt, saveProjectPrompt } from '../app/services/domain/project-prompt.mjs';
 import { sdkHarness, deferred, wait } from './helpers/fake-sdk-host.mjs';
 import { createSmokeServer } from './helpers/smoke-server.mjs';
@@ -11,6 +12,8 @@ test('BaodanPark 提示词创建、版本冲突、备份、空内容及编码大
   const temp = await createTempProject('project-prompt-'); t.after(() => temp.cleanup());
   await temp.ensureDir('project'); await temp.ensureDir('other');
   const root = temp.resolve('project'), backups = temp.resolve('backups');
+  assert.equal((await readProjectPrompt(root)).exists,false,'普通读取不创建Agent资源');
+  await prepareWorkspace(root);await prepareWorkspace(temp.resolve('other'));
   const missing = await readProjectPrompt(root); assert.equal(missing.exists, true);
   const first = await saveProjectPrompt(root, { content: '# 项目规则\n使用中文', revision: missing.revision }, backups);
   assert.equal(first.exists, true); assert.equal((await readProjectPrompt(temp.resolve('other'))).exists, true);

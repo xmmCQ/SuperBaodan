@@ -8,7 +8,7 @@ export function proportionalScrollTop(source, target) {
 
 export function createUiDialogController(elements) {
   const { dialog, form, title, message, field, closeButton, cancelButton, confirmButton } = elements;
-  let resolveCurrent = null;
+  let resolveCurrent = null, cancelSignal = null;
   let inputControl = null;
   let previewFrame = null;
   let scrollSyncFrame = null;
@@ -55,6 +55,7 @@ export function createUiDialogController(elements) {
     if (!resolveCurrent) return;
     const resolve = resolveCurrent;
     resolveCurrent = null;
+    cancelSignal?.(); cancelSignal = null;
     cancelPreviewFrame();
     cancelScrollSync();
     inputControl = null;
@@ -63,6 +64,7 @@ export function createUiDialogController(elements) {
   }
 
   function open(options = {}) {
+    if (options.signal?.aborted) return Promise.resolve(null);
     if (resolveCurrent) settle(null);
     mode = options.mode || "confirm";
     const hasPreview = mode === "editor" && typeof options.previewRenderer === "function";
@@ -142,6 +144,11 @@ export function createUiDialogController(elements) {
     confirmButton.classList.toggle("danger", Boolean(options.danger));
     cancelButton.textContent = options.cancelText || "取消";
     const result = new Promise((resolve) => { resolveCurrent = resolve; });
+    if (options.signal) {
+      const owner = resolveCurrent, abort = () => { if (resolveCurrent === owner) settle(null); };
+      options.signal.addEventListener('abort',abort,{once:true});
+      cancelSignal = () => options.signal.removeEventListener('abort',abort);
+    }
     dialog.showModal();
     requestAnimationFrame(() => {
       if (inputControl) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createTempProject } from './helpers/temp-project.mjs';
 import { modelPreferencesFixture } from './helpers/model-preferences-fixture.mjs';
@@ -11,7 +11,7 @@ import { findSdkEntry } from '../app/services/domain/pi-sdk-factory.mjs';
 
 async function fixture(t) {const temp=await createTempProject('model-preferences-');t.after(temp.cleanup);return modelPreferencesFixture(temp.root);}
 test('普通目录读取不联网，刷新部分失败保留旧目录并报告新增和时间',async t=>{
-  const f=await fixture(t),before=await f.command('models.catalog');await f.command('models.catalog');assert.equal(f.state.networkCalls,0);
+  const f=await fixture(t),before=await f.command('models.catalog');await Promise.all([f.command('models.catalog'),f.command('models.catalog')]);assert.equal(f.state.networkCalls,0);assert.equal(f.state.runtimeCreates,1);
   const auth=await readFile(path.join(f.agentDir,'auth.json')),custom=await readFile(path.join(f.agentDir,'models.json')),prefs=await f.readPreferences();
   f.state.remote=[...f.state.models,f.model('p','e')];f.state.failures.add('q');
   const refreshed=await f.command('models.refresh');
@@ -23,6 +23,12 @@ test('普通目录读取不联网，刷新部分失败保留旧目录并报告�
   const failed=await f.command('models.refresh');assert.equal(failed.refresh.status,'failed');assert.equal(failed.refresh.lastSuccessfulAt,refreshed.refresh.lastSuccessfulAt);assert.deepEqual(failed.models,refreshed.models);
   assert.equal(f.state.stopCalls,0);assert.equal(f.runtime.host.session.model.id,'b');assert.equal(before.models.length,4);
 });
+test('目录运行时缓存随配置文件版本失效，不复用旧配置',async t=>{
+  const f=await fixture(t);await f.command('models.catalog');const count=f.state.runtimeCreates;
+  const file=path.join(f.agentDir,'models.json');await writeFile(file,(await readFile(file,'utf8'))+'\n');
+  await f.command('models.catalog');assert.equal(f.state.runtimeCreates,count+1);assert.equal(f.state.networkCalls,0);
+});
+
 test('部分显示含旧通配配置时，新增模型也须显式选择，重复读取/刷新不自动勾选',async t=>{
   const f=await fixture(t);await f.command('models.saveDisplay',{enabledModels:['p/*','q/c']});
   const saved=await f.readPreferences();

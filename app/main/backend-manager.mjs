@@ -4,6 +4,8 @@ import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { createBackendEnvironment } from "./config.mjs";
+import { PROCESS_PROTOCOL } from '../shared/agent-protocol.js';
+import { attachProcessJob } from './process-job.mjs';
 import { RotatingLogWriter } from "./log-writer.mjs";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,6 +17,8 @@ export class BackendManager extends EventEmitter {
     this.root = config.root;
     this.dataRoot = config.dataRoot;
     this.nodePath = config.nodePath;
+    this.entryFile = config.entryFile || path.join(this.root,'app','services','main.mjs');
+    this.attachChild = dependencies.attachChild || (async run => { if(config.supervise)run.job=await attachProcessJob(run.child,run.id); });
     this.spawnProcess = dependencies.spawnProcess || spawn;
     this.prepare = dependencies.prepare || (() => this.initialize());
     this.createLogWriter = dependencies.createLogWriter || ((file) => new RotatingLogWriter(file, { onError: (error) => this.reportLogError(error) }));
@@ -29,8 +33,8 @@ export class BackendManager extends EventEmitter {
     this.lastReady = null;
     this.logError = null;
     this.logDir = path.join(this.dataRoot, "logs");
-    this.stdoutLog = path.join(this.logDir, "server.log");
-    this.stderrLog = path.join(this.logDir, "server-error.log");
+    this.stdoutLog = path.join(this.logDir, `${config.processRole || 'server'}.log`);
+    this.stderrLog = path.join(this.logDir, `${config.processRole || 'server'}-error.log`);
   }
 
   async initialize() {
@@ -80,7 +84,7 @@ export class BackendManager extends EventEmitter {
     try {
       await this.prepare(run.controller.signal);
       this.assertStartActive(run);
-      const child = this.spawnProcess(this.nodePath, [path.join(this.root, "app", "services", "main.mjs")], {
+      const child = this.spawnProcess(this.nodePath, [this.entryFile, `--baodan-run=${run.id}`], {
         cwd: this.root,
         windowsHide: true,
         serialization: "advanced",
@@ -126,10 +130,18 @@ export class BackendManager extends EventEmitter {
   }
 
   handleMessage(run, message) {
-    if (!message || typeof message !== "object" || message.runId !== run.id) return;
+    if (!message || message.v !== PROCESS_PROTOCOL || message.runId !== run.id || this.currentRun !== run || run.exitInfo) return;
     this.emit("message", { run, message });
-    if (message.type === "ready") {
-      run.resolveReady?.({ ok: true, desktopInstanceId: run.id });
+    if (message.type === 'hello' && !run.bootPromise) {
+      run.bootPromise = this.attachChild(run).then(async () => {
+        if (run.controller.signal.aborted || run.exitInfo || this.currentRun !== run) { await run.job?.release(); return; }
+        run.bootSent = true;
+        run.child.send({v:PROCESS_PROTOCOL,type:'boot',runId:run.id}, error=>{if(error)run.rejectReady?.(error);});
+      }).catch(error=>run.rejectReady?.(new BackendStartError('SUPERVISION_FAILED',error.message)));
+    } else if (message.type === "ready") {
+      if (!run.bootSent) return;
+      run.ready = { ok: true, desktopInstanceId: run.id };
+      run.resolveReady?.(run.ready);
     } else if (message.type === "startup-error") {
       run.rejectReady?.(new BackendStartError("STARTUP_ERROR", String(message.message || "后台服务启动失败")));
     } else if (message.type === "shutdown-error") {
@@ -152,6 +164,7 @@ export class BackendManager extends EventEmitter {
       run.resolveReady = (value) => finish(resolve, value);
       run.rejectReady = (error) => finish(reject, error);
       run.controller.signal.addEventListener("abort", cancelled, { once: true });
+      if (run.ready) finish(resolve,run.ready);
       if (run.startError) finish(reject, new BackendStartError('SPAWN_ERROR', run.startError.message));
       if (run.exitInfo) finish(reject, new BackendStartError("EARLY_EXIT", `后台服务提前退出（代码 ${run.exitInfo.code ?? "未知"}）`));
     });
@@ -161,6 +174,8 @@ export class BackendManager extends EventEmitter {
     if (run.cleanupPromise) return run.cleanupPromise;
     run.exitInfo = { code, signal };
     run.cleanupPromise = (async () => {
+      try { await run.bootPromise; await run.job?.release(); }
+      catch (error) { this.emit('shutdown-error',{runId:run.id,message:error.message}); run.cleanupPromise=null; return false; }
       await Promise.race([
         Promise.all([run.stdout, run.stderr].map(writer => Promise.resolve().then(() => writer.close()).catch(error => this.reportLogError(error)))),
         wait(1_500),
@@ -193,13 +208,13 @@ export class BackendManager extends EventEmitter {
     run.controller.abort();
     if (this.startPromise) await waitForPromise(this.startPromise.catch((error) => { if (!isStartCancelled(error)) this.emit("start-error", error); }), timeoutMs);
     if (this.currentRun !== run) return true;
-    if (run.exitInfo) return Boolean(await waitForPromise(run.exitPromise, timeoutMs));
+    if (run.exitInfo) { if(!run.cleanupPromise)void this.handleExit(run,run.exitInfo.code,run.exitInfo.signal); return Boolean(await waitForPromise(run.exitPromise, timeoutMs)); }
     if (!run.child) {
       await this.handleExit(run, null, null);
       return true;
     }
     run.shutdownRequested = true;
-    try { run.child.send?.({ type: "shutdown", runId: run.id }); }
+    try { run.child.send?.({ v: PROCESS_PROTOCOL, type: "shutdown", runId: run.id }); }
     catch (error) { this.emit("shutdown-error", { runId: run.id, message: error.message }); }
     const exited = await waitForPromise(run.exitPromise, timeoutMs);
     return Boolean(exited && run.exitInfo);
@@ -220,9 +235,10 @@ export class BackendManager extends EventEmitter {
     run.controller.abort();
     if (this.startPromise) await waitForPromise(this.startPromise.catch(() => {}), this.killTimeoutMs);
     if (this.currentRun !== run) return true;
-    if (run.exitInfo) return Boolean(await waitForPromise(run.exitPromise, this.killTimeoutMs));
+    if (run.exitInfo) { if(!run.cleanupPromise)void this.handleExit(run,run.exitInfo.code,run.exitInfo.signal); return Boolean(await waitForPromise(run.exitPromise, this.killTimeoutMs)); }
     if (!run.child) { await this.handleExit(run, null, null); return true; }
-    if (!safeKill(run.child, "SIGTERM")) return false;
+    if (run.job) { try { await run.job.release(); } catch(error) { this.reportLogError(error); return false; } }
+    else if (!safeKill(run.child, "SIGTERM")) return false;
     if (await waitForPromise(run.exitPromise, this.killTimeoutMs)) return true;
     if (!safeKill(run.child, "SIGKILL")) return false;
     return Boolean(await waitForPromise(run.exitPromise, this.killTimeoutMs));
@@ -231,7 +247,8 @@ export class BackendManager extends EventEmitter {
   async terminateRun(run) {
     if (!run.child || run.spawnFailed) { await this.handleExit(run, null, null); return true; }
     if (run.exitInfo) return Boolean(await waitForPromise(run.exitPromise, this.killTimeoutMs));
-    safeKill(run.child, "SIGTERM");
+    if (run.job) { try { await run.job.release(); } catch(error) { this.reportLogError(error); return false; } }
+    else safeKill(run.child, "SIGTERM");
     if (await waitForPromise(run.exitPromise, this.killTimeoutMs)) return true;
     safeKill(run.child, "SIGKILL");
     return Boolean(await waitForPromise(run.exitPromise, this.killTimeoutMs));

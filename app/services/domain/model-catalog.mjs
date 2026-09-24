@@ -1,4 +1,4 @@
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { writeJsonAtomic } from '../atomic-file.mjs';
 import { fault, publicErrorMessage } from '../../shared/errors.js';
@@ -21,8 +21,26 @@ export class ModelCatalog {
     try { return JSON.parse(await readFile(this.file, 'utf8')); }
     catch (error) { if (error.code === 'ENOENT') return {}; throw error; }
   }
-  async runtime() {
-    return this.createRuntime({credentials:readonlyCredentials(await this.readCredentials()),allowModelNetwork:false});
+  invalidateRuntime() { this.runtimeEpoch = (this.runtimeEpoch || 0) + 1; this.cachedRuntime = this.pendingRuntime = null; }
+  async runtimeVersion() {
+    return JSON.stringify(await Promise.all((this.inputFiles || []).map(async file => {
+      try { const s = await stat(file,{bigint:true}); return [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs].map(String); }
+      catch(error) { if(error.code==='ENOENT')return null;throw error; }
+    })));
+  }
+  async runtime(attempt = 0) {
+    const key = await this.runtimeVersion(), epoch = this.runtimeEpoch;
+    if (this.cachedRuntime?.key === key) return this.cachedRuntime.value;
+    if (this.pendingRuntime?.key === key) return this.pendingRuntime.promise;
+    const promise = (async () => {
+      const value = await this.createRuntime({credentials:readonlyCredentials(await this.readCredentials()),allowModelNetwork:false});
+      if (epoch !== this.runtimeEpoch || key !== await this.runtimeVersion()) {
+        if (attempt >= 2) throw fault(409,'模型配置在读取期间发生变化，请重试');
+        return this.runtime(attempt + 1);
+      }
+      this.cachedRuntime = {key,value}; return value;
+    })().finally(()=>{if(this.pendingRuntime?.promise===promise)this.pendingRuntime=null;});
+    this.pendingRuntime = {key,promise};return promise;
   }
   async models(runtime) {
     const levels = await this.thinkingCapabilities();
@@ -47,6 +65,7 @@ export class ModelCatalog {
   }
   async refresh({signal} = {}) {
     signal?.throwIfAborted();
+    this.invalidateRuntime();
     const before = await this.read(), runtime = await this.runtime();
     const providers = runtime.getProviders().filter(p=>runtime.getProviderAuthStatus(p.id).configured);
     if (!providers.length) throw fault(400, '尚未配置供应商，请先在“模型配置”完成配置');

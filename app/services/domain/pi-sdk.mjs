@@ -59,7 +59,10 @@ export class PiSdkRuntime extends EventEmitter {
   }
   listSessions() { return listSavedSessions(this.sessionDir, this.log); }
   invalidateSession(file = this.activeSessionPath) {
-    if (file) invalidateSavedSession(this.sessionDir, file);
+    if (file) {
+      invalidateSavedSession(this.sessionDir,file);
+      try { this.emit('sessions-changed',{file}); } catch(error) { this.log.error(`[pi-sdk] 会话缓存通知失败：${error.message}`); }
+    }
   }
   pendingUiRequests() { return this.uiBridge?.requests() || []; }
   snapshot({ messages = false, since } = {}) {

@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { BackendManager, isStartCancelled } from './backend-manager.mjs';
 import { FileActions } from './file-actions.mjs';
 import { ServiceClient } from './service-client.mjs';
+import { AgentProcessManager } from './agent-process-manager.mjs';
+import { ServiceBroker } from './service-broker.mjs';
+import { launchWorkApps } from '../services/domain/launch-work-apps.mjs';
+import { hasRequestCapacity } from '../shared/agent-protocol.js';
 import { resolveDesktopConfig } from './config.mjs';
 import { ExitCoordinator } from './exit-coordinator.mjs';
 import { installNavigationPolicy, isAllowedExternalUrl } from './navigation-policy.mjs';
@@ -12,7 +16,6 @@ import { APP_ORIGIN, createResourceHandler } from './resources.mjs';
 import { TrayManager } from './tray-manager.mjs';
 import { WindowManager } from './window-manager.mjs';
 import { assertTrustedFrame, validateInvocation } from './ipc-policy.mjs';
-import { MAX_PENDING_REQUESTS } from '../shared/commands.js';
 import { fault, publicErrorMessage } from '../shared/errors.js';
 
 const MAIN_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -26,14 +29,17 @@ if (!hasLock) app.exit(0);
 
 const backend = new BackendManager(config);
 const service = new ServiceClient(backend);
+const agent = new AgentProcessManager(config);
+const broker = new ServiceBroker(backend,agent);
+let launchingApps = false;
 let windows, tray, terminating = false, quitPermitted = false;
 const requests = new Map();
 const openingDocuments = new Set();
 const files = new FileActions({ dialog, getWindow: () => windows.window });
 const exitCoordinator = new ExitCoordinator({
   begin: () => { terminating = true; },
-  stopBackend: () => backend.stop(10000),
-  forceStop: () => backend.forceStop(),
+  stopBackend: () => broker.stop(10000),
+  forceStop: () => broker.forceStop(),
   setStatus: status => windows?.sendBackendStatus(status),
   forceFailed: async () => {
     await backend.logDesktopError('未能确认应用服务退出，保留托盘以便重试。');
@@ -68,7 +74,7 @@ service.on('event', ({ topic, event }) => {
 
 if (hasLock) app.whenReady().then(initialize).catch(async error => {
   await backend.logDesktopError(publicErrorMessage(error));
-  await backend.forceStop(); tray?.destroy(); app.exit(1);
+  await broker.forceStop(); tray?.destroy(); app.exit(1);
 });
 
 async function initialize() {
@@ -124,11 +130,18 @@ function registerIpc() {
       assertTrustedSender(event);
       if (terminating) throw fault(503, '工作台正在退出');
       const args = validateInvocation(message);
-      if (requests.has(message.id) || requests.size >= MAX_PENDING_REQUESTS) throw fault(429, '操作繁忙');
+      if (requests.has(message.id) || !hasRequestCapacity(requests,message.name,args)) throw fault(429, '操作繁忙');
       id = message.id;
-      const controller = new AbortController(); requests.set(id, controller);
+      const controller = Object.assign(new AbortController(),{name:message.name,args}); requests.set(id, controller);
       let value;
-      if (message.name === 'documents.pick') {
+      if (['apps.open','apps.openAll'].includes(message.name)) {
+        if(launchingApps)throw fault(409,'工作软件正在启动，请稍候');launchingApps=true;
+        try {
+          const launch=await service.invoke(message.name,args,{signal:controller.signal});
+          if(terminating||controller.signal.aborted)throw fault(499,'已取消启动软件');
+          value=launch.launchApps?await launchWorkApps(launch.launchApps,{appScript:path.join(ROOT,'scripts/open-work-apps.ps1')}):launch;
+        } finally { launchingApps=false; }
+      } else if (message.name === 'documents.pick') {
         value = await files.pick(controller.signal);
       } else {
         if (message.name === 'documents.open') {

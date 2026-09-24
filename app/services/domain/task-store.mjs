@@ -3,12 +3,14 @@ import path from 'node:path';
 import { parseWorkTodo, localDateString } from './tasks.mjs';
 import { addTaskMarkdown, deleteTaskMarkdown, moveTaskDateMarkdown, updateTaskMarkdown } from './task-writer.mjs';
 import { fault } from '../../shared/errors.js';
+import { createVersionedReader } from '../versioned-reader.mjs';
 
 export class TaskStore {
   constructor({ todoFile, backupDir }) {
     this.todoFile = todoFile;
     this.backupDir = backupDir;
     this.lastGoodSource = null;
+    this.reader = createVersionedReader(todoFile, parseWorkTodo);
     this.taskMutationQueue = Promise.resolve();
   }
 
@@ -16,12 +18,12 @@ export class TaskStore {
 
   async loadTasks() {
     try {
-      const [content, fileStat] = await Promise.all([readFile(this.todoFile, "utf8"), stat(this.todoFile)]);
-      const result = { tasks: parseWorkTodo(content), updatedAt: fileStat.mtime.toISOString(), stale: false, warning: null };
+      const {value:tasks,stat:fileStat} = await this.reader.read();
+      const result = { tasks, updatedAt: fileStat.mtime.toISOString(), stale: false, warning: null };
       this.lastGoodSource = result;
-      return result;
+      return structuredClone(result);
     } catch (error) {
-      if (this.lastGoodSource) return { ...this.lastGoodSource, stale: true, warning: `读取最新待办失败，当前展示上次数据：${error.message}` };
+      if (this.lastGoodSource) return { ...structuredClone(this.lastGoodSource), stale: true, warning: `读取最新待办失败，当前展示上次数据：${error.message}` };
       throw fault(500, `无法读取工作待办：${error.message}`);
     }
   }
@@ -51,7 +53,9 @@ export class TaskStore {
       const nextContent = transform(original);
       if (nextContent === original) return { updatedAt: currentRevision };
       const nextTasks = parseWorkTodo(nextContent);
-      await this.persistTodoFile(original, nextContent);
+      this.reader.invalidate();
+      try { await this.persistTodoFile(original, nextContent); }
+      finally { this.reader.invalidate(); }
       const nextStat = await stat(this.todoFile);
       this.lastGoodSource = { tasks: nextTasks, updatedAt: nextStat.mtime.toISOString(), stale: false, warning: null };
       return { updatedAt: nextStat.mtime.toISOString() };

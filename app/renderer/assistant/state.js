@@ -24,7 +24,7 @@ export function createAssistantState() {
     },
     workspace: {
       turnFiles: { involved: [], modified: [] }, previewPath: null,
-      atSearchTimer: null, workspace: null, workspaceReloadTimer: null,
+      workspace: null, workspaceReloadTimer: null,
     },
   };
 }

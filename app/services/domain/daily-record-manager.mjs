@@ -1,8 +1,8 @@
 import { fault } from '../../shared/errors.js';
-import { writeJsonAtomic } from '../atomic-file.mjs';
+import { createVersionedReader } from '../versioned-reader.mjs';
+import { initializeJsonFile, backupJsonFile, queueJsonMutation } from '../json-store-operations.mjs';
 import crypto from "node:crypto";
-import { copyFile, mkdir, readFile, readdir, unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readdir, unlink } from "node:fs/promises";
 import path from "node:path";
 
 const STORE_VERSION = 1;
@@ -20,6 +20,7 @@ export class DailyRecordManager {
     this.now = now;
     this.randomUUID = randomUUID;
     this.initializing = null;
+    this.reader = createVersionedReader(filePath, decodeStore);
     this.mutationTail = Promise.resolve();
   }
 
@@ -29,8 +30,7 @@ export class DailyRecordManager {
   }
 
   async initializeStore() {
-    await Promise.all([mkdir(path.dirname(this.filePath), { recursive: true }), mkdir(this.backupDir, { recursive: true })]);
-    if (!existsSync(this.filePath)) await writeJsonAtomic(this.filePath, { version: STORE_VERSION, items: [] }, { randomUUID: this.randomUUID });
+    await initializeJsonFile(this,()=>({version:STORE_VERSION,items:[]}));
     await this.readStore();
     return this;
   }
@@ -102,22 +102,7 @@ export class DailyRecordManager {
     });
   }
 
-  async mutate(operation) {
-    await this.initialize();
-    const run = async () => {
-      const store = await this.readStore();
-      const { result, changed } = await operation(store);
-      if (changed) {
-        await this.backup();
-        await writeJsonAtomic(this.filePath, store, { randomUUID: this.randomUUID });
-        await this.trimBackups();
-      }
-      return result;
-    };
-    const pending = this.mutationTail.then(run, run);
-    this.mutationTail = pending.catch(() => {});
-    return pending;
-  }
+  async mutate(operation) { return (await queueJsonMutation(this,operation)).result; }
 
   async readInitializedStore() {
     await this.initialize();
@@ -126,33 +111,32 @@ export class DailyRecordManager {
 
   async readStore() {
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, "utf8"));
-      if (parsed?.version !== STORE_VERSION || !Array.isArray(parsed.items)) throw new Error("文件结构无效");
-      const ids = new Set();
-      const items = parsed.items.map((item) => {
-        const record = validateRecord(item);
-        if (ids.has(record.id)) throw new Error(`每日记录ID重复：${record.id}`);
-        ids.add(record.id);
-        return record;
-      });
-      return { version: STORE_VERSION, items };
+      return structuredClone((await this.reader.read()).value);
     } catch (error) {
       if (error.statusCode) throw error;
       throw fault(500, `每日记录读取失败：${error.message}`);
     }
   }
 
-  async backup() {
-    if (!existsSync(this.filePath)) return;
-    const stamp = this.now().toISOString().replace(/[:.]/g, "-");
-    await copyFile(this.filePath, path.join(this.backupDir, `daily-records-${stamp}-${this.randomUUID().slice(0, 8)}.json`));
-  }
+  backup() { return backupJsonFile(this,'daily-records'); }
 
   async trimBackups() {
     const files = (await readdir(this.backupDir)).filter((name) => name.startsWith("daily-records-") && name.endsWith(".json")).sort().reverse();
     await Promise.all(files.slice(30).map((name) => unlink(path.join(this.backupDir, name)).catch(() => {})));
   }
 
+}
+
+function decodeStore(content) {
+  const parsed = JSON.parse(content);
+  if (parsed?.version !== STORE_VERSION || !Array.isArray(parsed.items)) throw new Error('文件结构无效');
+  const ids = new Set();
+  const items = parsed.items.map(item => {
+    const record = validateRecord(item);
+    if (ids.has(record.id)) throw new Error(`每日记录ID重复：${record.id}`);
+    ids.add(record.id); return record;
+  });
+  return {version:STORE_VERSION,items};
 }
 
 function validateCreateInput(input) {

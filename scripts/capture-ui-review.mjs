@@ -57,6 +57,7 @@ try {
     if(tab==='accounts')await browser.waitFor("document.querySelectorAll('#oauthProviders .provider-card').length>0");
     if(tab==='projectPrompt')await browser.waitFor("!document.querySelector('.project-prompt-reload').disabled");
     if(tab==='skills')await browser.waitFor("document.querySelectorAll('.skill-list-select').length>0");
+    if(tab==='projectPrompt')await browser.evaluate("document.querySelector('.project-prompt-path').textContent='C:/匿名示例/工作区/BaodanPark/AGENTS.md'");
     await capture('settings-'+tab);
   }
   await writeFile(path.join(output,'measurements.json'), JSON.stringify(measurements,null,2));

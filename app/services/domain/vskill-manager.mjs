@@ -1,8 +1,6 @@
 import { fault } from '../../shared/errors.js';
-import { copyFile, mkdir, readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import path from "node:path";
-import { writeJsonAtomic } from '../atomic-file.mjs';
+import { readFile } from "node:fs/promises";
+import { initializeJsonFile, backupJsonFile, queueJsonMutation } from '../json-store-operations.mjs';
 import crypto from "node:crypto";
 
 const STORE_VERSION = 1;
@@ -30,15 +28,10 @@ export class VSkillManager {
   }
 
   async initializeStore() {
-    await Promise.all([
-      mkdir(path.dirname(this.filePath), { recursive: true }),
-      mkdir(this.backupDir, { recursive: true }),
-    ]);
-    if (!existsSync(this.filePath)) {
+    await initializeJsonFile(this,()=>{
       const timestamp = this.now().toISOString();
-      const items = DEFAULT_VSKILLS.map((item) => ({ ...item, createdAt: timestamp, updatedAt: timestamp }));
-      await writeJsonAtomic(this.filePath, { version: STORE_VERSION, items }, { randomUUID: this.randomUUID });
-    }
+      return {version:STORE_VERSION,items:DEFAULT_VSKILLS.map(item=>({...item,createdAt:timestamp,updatedAt:timestamp}))};
+    });
     await this.readStore();
     return this;
   }
@@ -86,19 +79,8 @@ export class VSkillManager {
   }
 
   async mutate(operation) {
-    await this.initialize();
-    const run = async () => {
-      const store = await this.readStore();
-      const { result, changed } = await operation(store);
-      if (changed) {
-        await this.backup();
-        await writeJsonAtomic(this.filePath, store, { randomUUID: this.randomUUID });
-      }
-      return { ...result, unchanged: !changed };
-    };
-    const result = this.mutationTail.then(run, run);
-    this.mutationTail = result.catch(() => {});
-    return result;
+    const {result,changed} = await queueJsonMutation(this,operation);
+    return {...result,unchanged:!changed};
   }
 
   async readStore() {
@@ -127,12 +109,7 @@ export class VSkillManager {
     }
   }
 
-  async backup() {
-    if (!existsSync(this.filePath)) return;
-    const stamp = this.now().toISOString().replace(/[:.]/g, "-");
-    const suffix = this.randomUUID().slice(0, 8);
-    await copyFile(this.filePath, path.join(this.backupDir, `vskills-${stamp}-${suffix}.json`));
-  }
+  backup() { return backupJsonFile(this,'vskills'); }
 
 }
 

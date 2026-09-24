@@ -1,7 +1,9 @@
 import { repairToolOutputEncoding } from "/assistant/text-normalization.js?v=1";
+import { createAgentUi } from '../core/agent-ui.js';
 import { createSnapshotRecovery } from '../core/snapshot-recovery.js';
 import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
-import { cancelReadingAdjustment } from '../core/reading-position.js';
+import { cancelReadingAdjustment, preserveReadingPositions } from '../core/reading-position.js';
+import { createStreamingMarkdown, updateStreamingText } from '../core/streaming-markdown.js';
 import { createResponseFallback } from "../core/response-fallback.js";
 import { createImageAttachments } from './image-attachments.js';
 import { validatePromptPayload } from '../../shared/prompt-images.js';
@@ -23,6 +25,7 @@ export function createChatView({
   previewWorkspaceFile,
   updateStateFromAgent
 }) {
+  const agentUi=createAgentUi({command,uiDialogs,input:el.promptInput,resize:resizePrompt,notice:showNotice,error:showError});
   const ASSISTANT_WORKING_TEXT = "努力搬砖中！";
   const MESSAGE_BOTTOM_THRESHOLD = 80;
   let stickToMessageBottom = true, scrollEpoch = 0, sending = null;
@@ -74,11 +77,11 @@ function createLiveAssistant(message) {
   }
   if (state.live?.node?.isConnected) return;
   const node = createMessageShell("assistant");
-  state.live = { node, bubble: node.querySelector(".bubble"), text: "", thinking: "", tools: new Map(), snapshot: message, renderFrame: null, current: captureLiveContext() };
+  const content = Array.isArray(message?.content) ? message.content : [];
+  const tools = new Map(content.filter(p=>p.type==='toolCall').map((p,i)=>[p.id || `tool-${i}`,{name:p.name || 'tool',args:JSON.stringify(p.arguments || {},null,2),arguments:p.arguments}]));
+  state.live = { node, bubble: node.querySelector(".bubble"), text: content.filter(p=>p.type==='text').map(p=>p.text || '').join(''), thinking: content.filter(p=>p.type==='thinking').map(p=>p.thinking || '').join(''), tools, toolNodes:new Map(), dirtyTools:new Set(tools.keys()), executionDirty:true, snapshot: message, renderFrame: null, current: captureLiveContext() };
   el.messages.append(node);
-  const rendered = message?.content?.length ? renderAssistantContent(state.live.bubble, message.content) : 0;
-  if (!rendered) state.live.bubble.append(createAssistantStatus("正在思考…", "pending"));
-  execution?.register(node, message || { role: "assistant" }, undefined, { live: true }); execution?.refresh(true);
+  renderLiveAssistant();
   scrollBottom();
 }
 
@@ -89,15 +92,19 @@ function applyDelta(delta) {
   if (delta.type === "text_end" && typeof delta.content === "string") state.live.text = delta.content;
   if (delta.type === "thinking_delta") state.live.thinking += delta.delta || "";
   if (delta.type === "thinking_end" && typeof delta.content === "string") state.live.thinking = delta.content;
-  if (delta.type === "toolcall_start") state.live.tools.set(delta.id || `tool-${state.live.tools.size}`, { name: delta.toolName || "tool", args: "" });
+  if (delta.type === "toolcall_start") {
+    const key = delta.id || `tool-${state.live.tools.size}`;
+    state.live.tools.set(key, { name: delta.toolName || "tool", args: "" }); state.live.dirtyTools.add(key);
+  }
   if (delta.type === "toolcall_delta") {
     const key = delta.id || [...state.live.tools.keys()].at(-1);
     const tool = state.live.tools.get(key);
-    if (tool) tool.args += delta.delta || "";
+    if (tool) { tool.args += delta.delta || ""; state.live.dirtyTools.add(key); }
   }
   if (delta.type === "toolcall_end" && delta.toolCall) {
     const key = delta.toolCall.id || [...state.live.tools.keys()].at(-1);
-    state.live.tools.set(key, { name: delta.toolCall.name || delta.toolCall.toolName || "tool", args: JSON.stringify(delta.toolCall.arguments || {}, null, 2) });
+    state.live.tools.set(key, { name: delta.toolCall.name || delta.toolCall.toolName || "tool", args: JSON.stringify(delta.toolCall.arguments || {}, null, 2), arguments:delta.toolCall.arguments });
+    state.live.dirtyTools.add(key); state.live.executionDirty = true;
   }
   scheduleLiveAssistantRender();
 }
@@ -108,38 +115,54 @@ function scheduleLiveAssistantRender() {
   live.renderFrame = requestAnimationFrame(() => {
     if (!state.live || state.live !== live) return;
     live.renderFrame = null;
-    renderLiveAssistant();
+    renderLiveAssistant({filesChanged:false});
     scrollBottom();
   });
 }
 
-function renderLiveAssistant() {
-  if (execution) execution.change(renderLiveAssistantContent); else renderLiveAssistantContent();
+function renderLiveAssistant({filesChanged = true} = {}) {
+  const live = state.live; if (!live) return;
+  const update = () => renderLiveAssistantContent(filesChanged);
+  if (!execution) { update(); return; }
+  const readers = [...live.dirtyTools].map(key=>live.toolNodes.get(key)?.body).filter(Boolean);
+  if (!stickToMessageBottom) readers.unshift(el.messages);
+  if (live.executionDirty || filesChanged) execution.change(update);
+  else if (readers.length) preserveReadingPositions(readers,update);
+  else update();
 }
-function renderLiveAssistantContent() {
+function renderLiveAssistantContent(filesChanged) {
   const live = state.live;
   if (!live) return;
-  live.bubble.replaceChildren();
-  if (live.thinking) {
-    const thinking = document.createElement("details");
-    thinking.className = "thinking";
-    const summary = document.createElement("summary");
-    summary.textContent = "思考过程";
-    const text = document.createElement("div");
-    text.textContent = live.thinking;
-    thinking.append(summary, text);
-    live.bubble.append(thinking);
+  let structure = live.executionDirty; live.executionDirty = false;
+  if (live.thinking && !live.thinkingNode) {
+    live.thinkingNode = document.createElement('details'); live.thinkingNode.className='thinking';
+    const summary=document.createElement('summary');summary.textContent='思考过程';
+    live.thinkingBody=document.createElement('div');live.thinkingNode.append(summary,live.thinkingBody);live.bubble.append(live.thinkingNode);structure=true;
   }
-  if (live.text) {
-    const text = document.createElement("div");
-    renderMarkdown(text, live.text, { onNotice: showNotice });
-    live.bubble.append(text);
+  if (live.thinkingBody && live.renderedThinking !== live.thinking) {updateStreamingText(live.thinkingBody,live.thinking);live.renderedThinking=live.thinking;}
+  if (live.text && !live.textNode) {
+    live.textNode=document.createElement('div');live.bubble.append(live.textNode);
+    live.markdown=createStreamingMarkdown(live.textNode,renderMarkdown,{onNotice:showNotice});structure=true;
   }
-  for (const tool of live.tools.values()) live.bubble.append(createToolCard(tool.name, tool.args));
-  appendTurnFilesCard(live.bubble, state.turnFiles);
-  if (!live.bubble.childElementCount) live.bubble.append(createAssistantStatus("正在思考…", "pending"));
-  const content = [{ type: "thinking", thinking: live.thinking }, { type: "text", text: live.text }, ...[...live.tools].map(([id, tool]) => ({ type: "toolCall", id, name: tool.name }))];
-  execution?.register(live.node, { ...live.snapshot, role: "assistant", content }, undefined, { live: true }); execution?.refresh(true);
+  live.markdown?.update(live.text);
+  for (const key of live.dirtyTools) {
+    const tool=live.tools.get(key); if(!tool)continue;
+    let item=live.toolNodes.get(key);
+    if(!item){const node=createToolCard(tool.name,tool.args);item={node,body:node.querySelector('.tool-result'),title:node.querySelector('b')};live.toolNodes.set(key,item);live.bubble.append(node);structure=true;}
+    if(item.body.textContent!==tool.args)updateStreamingText(item.body,tool.args);
+    const title=`工具 · ${displayToolName(tool.name)}`;if(item.title.textContent!==title)item.title.textContent=title;
+  }
+  live.dirtyTools.clear();
+  if(filesChanged){
+    const signature=JSON.stringify([state.turnFiles,(state.turnFiles.modified || []).map(file=>execution?.isConfirmedFile(file))]);
+    if(signature!==live.filesSignature){live.bubble.querySelector('.turn-files-card')?.remove();appendTurnFilesCard(live.bubble,state.turnFiles);live.filesSignature=signature;structure=true;}
+  }
+  if(live.text || live.thinking || live.tools.size){live.status?.remove();live.status=null;}
+  else if(!live.status){live.status=createAssistantStatus('正在思考…','pending');live.bubble.append(live.status);}
+  if (structure) {
+    const content=[{type:'thinking',thinking:live.thinking},{type:'text',text:live.text},...[...live.tools].map(([id,tool])=>({type:'toolCall',id,name:tool.name,arguments:tool.arguments}))];
+    execution?.register(live.node,{...live.snapshot,role:'assistant',content},undefined,{live:true});execution?.refresh(true);
+  }
 }
 
 function finalizeMessage(message) {
@@ -397,28 +420,10 @@ function startResponseFallback() { responseFallback.start(); }
 
 function stopResponseFallback() { responseFallback.stop(); }
 
-async function handleExtensionUi(request) {
-  try {
-    if (request.method === "notify") return showNotice(request.message, request.notifyType === "error");
-    if (request.method === "setTitle" && request.title) return document.title = request.title;
-    if (request.method === "set_editor_text") { el.promptInput.value = request.text || ""; return resizePrompt(); }
-    let response = { type: "extension_ui_response", id: request.id };
-    if (request.method === "confirm") response.confirmed = await uiDialogs.confirm(request.message || "", { title: request.title || "确认" });
-    else if (request.method === "select") {
-      const value = await uiDialogs.select(request.title || "请选择", request.options || [], { message: request.message || "", initialValue: request.options?.[0] || "" });
-      if (value == null) response.cancelled = true; else response.value = value;
-    } else if (request.method === "input" || request.method === "editor") {
-      const options = { message: request.message || "", placeholder: request.placeholder || "" };
-      const value = request.method === "editor"
-        ? await uiDialogs.editor(request.title || "请输入", request.prefill || "", options)
-        : await uiDialogs.prompt(request.title || "请输入", request.prefill || "", options);
-      if (value == null) response.cancelled = true; else response.value = value;
-    } else return;
-    await command(response);
-  } catch (error) { showError(error); }
-}
+const handleExtensionUi = agentUi.handle;
 
 function clearWorkspaceDraft() {
+  agentUi.reset();
   replyActions?.clear();
   stopResponseFallback();
   el.promptInput.value = "";
@@ -469,5 +474,5 @@ function scrollBottom(behavior = "auto", force = false) {
   function toolStarted(id, name) { state.activeTools.set(id, displayToolName(name || "tool")); updateToolStatus(); }
   function toolEnded(id) { state.activeTools.delete(id); updateToolStatus(); }
   function imageCount() { return state.images.length; }
-  return { observeSyncEvent: snapshotRecovery.event, loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToMessageBottom = false; scrollEpoch += 1; }, isRunning, isStreaming, setRuntimeState, setLastAgentEventAt, settle, toolStarted, toolEnded, imageCount, createLiveAssistant, applyDelta, renderLiveAssistant, finalizeMessage, renderMessages, sendPrompt, compactSession, syncMessagesFromAgent, startResponseFallback, stopResponseFallback, addImages, handleExtensionUi, clearWorkspaceDraft, updateToolStatus, setRuntime, resizePrompt, scrollBottom };
+  return { observeSyncEvent: snapshotRecovery.event, loadDirectoryPage: () => loadEarlierMessages(true), pauseFollow: () => { stickToMessageBottom = false; scrollEpoch += 1; }, isRunning, isStreaming, setRuntimeState, setLastAgentEventAt, settle, toolStarted, toolEnded, imageCount, createLiveAssistant, applyDelta, renderLiveAssistant, finalizeMessage, renderMessages, sendPrompt, compactSession, syncMessagesFromAgent, startResponseFallback, stopResponseFallback, addImages, handleExtensionUi, resetAgentUi:agentUi.reset, clearWorkspaceDraft, updateToolStatus, setRuntime, resizePrompt, scrollBottom };
 }

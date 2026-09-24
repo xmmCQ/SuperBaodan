@@ -1,3 +1,4 @@
+import { createLatestQuery } from '../core/latest-query.js';
 import { createFileTabs } from "./file-tabs.js";
 import { createWorkspacePanel } from "./workspace-panel.js";
 import { createSidebarResize } from "./sidebar-resize.js?v=ui1";
@@ -16,8 +17,16 @@ export function createWorkspaceController({
   resizePrompt,
   loadBootstrap
 }) {
-  let panel, treeController, searchController;
+  let panel, treeController;
   const scopeKey = () => state.workspace?.id || state.workspace?.root || null;
+  const atQuery = () => el.promptInput.value.slice(0,el.promptInput.selectionStart).match(/(?:^|\s)@([^\s@]{1,100})$/)?.[1] || '';
+  const makeSearch = (query, insertMode) => createLatestQuery({ query, scope:scopeKey,
+    request:(q,signal)=>invoke('files.search',{q,workspaceId:state.workspace?.id},{signal}),
+    publish:data=>renderWorkspaceSearchResults(data.results || [],insertMode),
+    clear:()=>(insertMode?el.atFileMenu:el.workspaceSearchResults).classList.add('hidden'),
+    onError:error=>{if(!insertMode)showError(error);},
+  });
+  const fileSearch = makeSearch(()=>el.workspaceSearch.value.trim(),false), atSearch = makeSearch(atQuery,true);
   const fileTabs = createFileTabs({
     elements: el, createMarkdownArticle, onNotice: showNotice, onError: showError,
     loadFile: (filePath, options) => invoke("files.preview", { path: filePath, workspaceId: state.workspace?.id }, options),
@@ -170,16 +179,7 @@ function renderTreeEntries(entries, root = false) {
   return list;
 }
 
-async function searchWorkspaceFiles() {
-  searchController?.abort();
-  const query = el.workspaceSearch.value.trim();
-  if (!query) { el.workspaceSearchResults.classList.add("hidden"); return; }
-  const controller = new AbortController(), scope = scopeKey(); searchController = controller;
-  try {
-    const data = await invoke("files.search", { q: query, workspaceId: state.workspace?.id }, { signal: controller.signal });
-    if (!controller.signal.aborted && scope === scopeKey()) renderWorkspaceSearchResults(data.results || [], false);
-  } catch (error) { if (!controller.signal.aborted && scope === scopeKey()) showError(error); }
-}
+function searchWorkspaceFiles() { return fileSearch.run(); }
 
 function renderWorkspaceSearchResults(results, insertMode) {
   const container = insertMode ? el.atFileMenu : el.workspaceSearchResults;
@@ -219,21 +219,12 @@ function renderTurnFiles() {
 
 function handlePromptInput() {
   resizePrompt();
-  clearTimeout(state.atSearchTimer);
-  const beforeCursor = el.promptInput.value.slice(0, el.promptInput.selectionStart);
-  const match = beforeCursor.match(/(?:^|\s)@([^\s@]{1,100})$/);
-  if (!match) { el.atFileMenu.classList.add("hidden"); return; }
-  state.atSearchTimer = setTimeout(async () => {
-    const scope = scopeKey();
-    try {
-      const data = await invoke("files.search", { q: match[1], workspaceId: state.workspace?.id });
-      if (scope === scopeKey()) renderWorkspaceSearchResults(data.results || [], true);
-    } catch { el.atFileMenu.classList.add("hidden"); }
-  }, 120);
+  atSearch.run(120);
 }
 
 function insertFileReference(filePath) {
   if (!filePath) return;
+  atSearch.cancel();
   const input = el.promptInput;
   const cursor = input.selectionStart;
   const before = input.value.slice(0, cursor);
@@ -255,7 +246,7 @@ function scheduleWorkspaceReload(message = "") {
   function setWorkspace(workspace) {
     const next = workspace?.id || workspace?.root || null;
     if (scopeKey() !== next) {
-      treeController?.abort(); searchController?.abort(); clearTimeout(state.atSearchTimer);
+      treeController?.abort(); fileSearch.cancel(); atSearch.cancel();
       el.workspaceSearch.value = ""; el.workspaceSearchResults.replaceChildren(); el.workspaceSearchResults.classList.add("hidden");
       el.atFileMenu.replaceChildren(); el.atFileMenu.classList.add("hidden"); el.workspaceTree.textContent = "正在读取……";
       fileTabs.setWorkspace(next);

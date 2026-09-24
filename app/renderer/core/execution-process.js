@@ -55,7 +55,7 @@ export function createExecutionProcess({ container, getScope, getWorkspaceRoot =
     summary.append(label, action);
     const body = document.createElement("div"); body.className = "execution-steps";
     drawer.append(summary, body);
-    const turn = { id: ++sequence, drawer, label, action, body, phase: null, manual: undefined, events: new Map(), members: [] };
+    const turn = { id: ++sequence, drawer, label, action, body, phase: null, manual: undefined, events: new Map(), members: [], nodes: new Set() };
     // Record intent synchronously, rather than relying on delayed toggle events.
     summary.addEventListener("click", () => { turn.manual = !drawer.open; });
     drawer.addEventListener("execution-reveal", () => { turn.manual = true; drawer.open = true; });
@@ -86,7 +86,7 @@ export function createExecutionProcess({ container, getScope, getWorkspaceRoot =
     if (message.role !== "user" && bubble) {
       const intermediate = message.stopReason === "toolUse";
       let candidates = [...bubble.children].filter((part) => part.matches(".thinking, .tool-card, .tool-result") || (intermediate && part.matches(".markdown-body")));
-      if (!candidates.length && previous) candidates = previous.parts;
+      if (previous) candidates = [...new Set([...previous.parts,...candidates])];
       const ordinals = {}, toolCalls = (Array.isArray(message.content) ? message.content : []).filter((part) => part.type === 'toolCall');
       candidates.forEach((candidate) => {
         let chunk = candidate;
@@ -122,23 +122,28 @@ export function createExecutionProcess({ container, getScope, getWorkspaceRoot =
         if (toolId) chunk.dataset.executionToolId = toolId;
         if (index != null) chunk.dataset.executionMessageIndex = index;
         if (chunkKey) chunks.set(chunkKey, chunk);
-        parts.push(chunk); chunk.remove();
+        parts.push(chunk); if (chunk.parentElement === bubble) chunk.remove();
       });
     }
+    if (previous && previous.key !== key) turns.get(previous.key)?.nodes.delete(node);
+    turnFor(key).nodes.add(node);
     metadata.set(node, { key, id, message, parts });
     node.classList.toggle("execution-source", message.role !== "user" && !bubble?.textContent.trim());
   }
   function refresh(activeOnly = false) {
     syncScope();
     const selected = () => [...turns.entries()].filter(([key]) => !activeOnly || key === current).map(([, turn]) => turn);
-    for (const turn of selected()) { turn.members = []; turn.drawer.remove(); }
-    for (const node of container.querySelectorAll(":scope > .message")) {
-      const info = metadata.get(node);
-      if (info && (!activeOnly || info.key === current)) turnFor(info.key).members.push({ node, ...info });
+    if (!activeOnly) {
+      for (const turn of turns.values()) turn.nodes.clear();
+      for (const node of container.querySelectorAll(':scope > .message')) {
+        const info=metadata.get(node);if(info)turnFor(info.key).nodes.add(node);
+      }
     }
     for (const turn of selected()) {
+      turn.nodes = new Set([...turn.nodes].filter(node=>node.parentElement===container));
+      turn.members = [...turn.nodes].map(node=>({node,...metadata.get(node)}));
       const members = turn.members.filter((item) => item.message.role !== "user");
-      if (!members.length) { turn.body.replaceChildren(); continue; }
+      if (!members.length) { turn.body.replaceChildren(); turn.drawer.remove(); continue; }
       const cards = members.flatMap(({ node }) => [...node.querySelectorAll('.turn-files-card')]);
       cards.slice(0, -1).forEach((card) => card.remove());
       for (const item of members) item.node.classList.toggle("execution-source", !item.node.querySelector('.bubble')?.textContent.trim());
@@ -151,7 +156,7 @@ export function createExecutionProcess({ container, getScope, getWorkspaceRoot =
       for (const id of turn.events.keys()) calls.add(id);
       const last = members.findLast((item) => item.message.role === "assistant")?.message;
       const label = executionLabel(turn.phase, last, failedIds.size);
-      if (!parts.length && !failedIds.size && !["retrying", "stopping", "stopped", "failed", "interrupted"].includes(turn.phase) && !["aborted", "error", "length"].includes(last?.stopReason)) continue;
+      if (!parts.length && !failedIds.size && !["retrying", "stopping", "stopped", "failed", "interrupted"].includes(turn.phase) && !["aborted", "error", "length"].includes(last?.stopReason)) { turn.drawer.remove(); continue; }
       const modified = confirmedFiles(members[0].key).size;
       turn.label.textContent = label + (modified ? ` · 已确认修改 ${modified} 个文件` : '') + (calls.size ? ` · ${calls.size} 次工具调用` : "");
       turn.drawer.classList.toggle("has-failure", failedIds.size > 0 || turn.phase === "failed" || last?.stopReason === "error");
@@ -162,7 +167,13 @@ export function createExecutionProcess({ container, getScope, getWorkspaceRoot =
         if (summary && !summary.textContent.startsWith('失败 · ')) summary.textContent = `失败 · ${summary.textContent}`;
         if (part.dataset.executionTouched !== 'true') part.open = true;
       }
-      turn.body.replaceChildren(...parts);
+      const wanted = new Set(parts);
+      for (const node of [...turn.body.children]) if (!wanted.has(node)) node.remove();
+      let cursor = turn.body.firstChild;
+      for (const part of parts) {
+        if (part === cursor) cursor = cursor.nextSibling;
+        else turn.body.insertBefore(part,cursor);
+      }
       if (failedIds.size && !parts.some((part) => part.classList.contains("execution-failure"))) {
         const warning = document.createElement("p"); warning.className = "execution-failure";
         warning.textContent = errors.find((item) => item.message.errorMessage)?.message.errorMessage || "有步骤执行失败；已收到的参数和日志保留在此处。";
@@ -173,7 +184,8 @@ export function createExecutionProcess({ container, getScope, getWorkspaceRoot =
       turn.action.textContent = turn.drawer.open ? "收起执行过程" : "查看执行过程";
       const host = members.findLast((item) => !item.node.classList.contains("execution-source")) || members.at(-1);
       host.node.classList.remove("execution-source");
-      host.node.querySelector(".bubble").append(turn.drawer);
+      const hostBubble = host.node.querySelector('.bubble');
+      if (turn.drawer.parentElement !== hostBubble || hostBubble.lastElementChild !== turn.drawer) hostBubble.append(turn.drawer);
     }
     if (!activeOnly) {
       const used = new Set([...turns.values()].flatMap((turn) => turn.members.flatMap((member) => member.parts)));

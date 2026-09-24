@@ -10,13 +10,30 @@ export function createCalendar({
   recordCountForDate = () => 0
 }) {
 const holidays = createHolidayMarks({ container: el.calendarGrid, invoke });
+let renderedKey, selected;
+const buttons = new Map();
+el.calendarGrid.addEventListener('click', event => {
+  const button = event.target.closest('.calendar-day');
+  if (button && el.calendarGrid.contains(button)) loadDay(button.dataset.date);
+});
+function selectDay() {
+  const next = state.requestedDate || state.selectedDate;
+  if (next === selected) return;
+  buttons.get(selected)?.classList.remove('selected');
+  buttons.get(next)?.classList.add('selected');
+  selected = next;
+}
 function renderCalendar() {
   if (!state.dashboard) return;
   const [year, month] = state.month.split("-").map(Number);
-  el.monthTitle.textContent = `${year}年${month}月`;
   const first = new Date(year, month - 1, 1);
   const startOffset = (first.getDay() + 6) % 7;
   const gridStart = new Date(year, month - 1, 1 - startOffset);
+  const dates = Array.from({length:42},(_,i) => { const date = new Date(gridStart); date.setDate(date.getDate()+i); return toLocalDate(date); });
+  const key = JSON.stringify([state.month,state.today,state.dashboard.updatedAt || [state.dashboard.events,state.dashboard.pendingByDate],dates.map(recordCountForDate)]);
+  if (key === renderedKey) { selectDay(); return; }
+  renderedKey = key; selected = null; buttons.clear();
+  el.monthTitle.textContent = `${year}年${month}月`;
   const eventsByDate = new Map();
 
   for (const event of state.dashboard.events) {
@@ -62,10 +79,10 @@ function renderCalendar() {
         ${recordCount ? `<i class="record-calendar-mark" aria-hidden="true"></i>` : ""}
         ${dayEvents.length ? `<span class="event-count">${dayEvents.length}</span>` : ""}
       </span>`;
-    button.addEventListener("click", () => loadDay(dateString));
+    buttons.set(dateString,button);
     el.calendarGrid.appendChild(button);
   }
-  holidays.refresh();
+  selectDay(); holidays.refresh();
 }
   return { renderCalendar };
 }

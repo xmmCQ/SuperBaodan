@@ -14,7 +14,7 @@ class FakeChild extends EventEmitter {
     super(); this.stdout = new EventEmitter(); this.stderr = new EventEmitter();
     this.autoExit = autoExit; this.killResult = killResult; this.messages = []; this.kills = [];
   }
-  send(message) { this.messages.push(message); if (message.type === "shutdown" && this.autoExit) queueMicrotask(() => this.exit(0, null)); }
+  send(message) { this.messages.push(message); if(message.type==='boot')queueMicrotask(()=>this.emit('message',{v:1,type:'ready',runId:this.runId})); if (message.type === "shutdown" && this.autoExit) queueMicrotask(() => this.exit(0, null)); }
   kill(signal) { this.kills.push(signal); if (this.killResult && this.autoExit) queueMicrotask(() => this.exit(null, signal)); return this.killResult; }
   exit(code, signal) { this.emit("exit", code, signal); }
 }
@@ -43,7 +43,7 @@ async function waitForChild(children, index = 0) {
 
 async function ready(manager, children, index = 0) {
   const child = await waitForChild(children, index);
-  child.emit("message", { type: "ready", runId: child.runId });
+  child.emit("message", { v:1, type: "hello", runId: child.runId });
   for (let i = 0; i < 20 && manager.state !== "running"; i += 1) await new Promise((resolve) => setTimeout(resolve, 1));
   return child;
 }

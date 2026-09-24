@@ -4,20 +4,21 @@ import { copyFile, mkdir, readFile, readdir, realpath, rename, stat, unlink, wri
 import os from "node:os";
 import path from "node:path";
 
-import { prepareWorkspace } from './workspace-layout.mjs';
+import { prepareWorkspace, inspectWorkspace } from './workspace-layout.mjs';
 import { validateWorkspaceSettings } from './workspace-resources.mjs';
 
 const VERSION = 1;
 const NAME_MAX = 60;
 
 export class WorkspaceRegistry {
-  constructor({ filePath, backupDir, defaultRoot, log = console, platform = process.platform, homeDir = os.homedir() }) {
+  constructor({ filePath, backupDir, defaultRoot, log = console, platform = process.platform, homeDir = os.homedir(), prepareLayout = true }) {
     this.filePath = path.resolve(filePath);
     this.backupDir = path.resolve(backupDir);
     this.defaultRoot = path.resolve(defaultRoot);
     this.log = log;
     this.platform = platform;
     this.homeDir = homeDir;
+    this.prepareLayout = prepareLayout ? prepareWorkspace : inspectWorkspace;
     this.data = null;
     this.fallbackWarning = null;
     this.queue = Promise.resolve();
@@ -36,7 +37,7 @@ export class WorkspaceRegistry {
       const now = new Date().toISOString();
       const item = { id: crypto.randomUUID(), name: "默认工作区", root: canonicalDefault, canonicalRoot: canonicalDefault, isDefault: true, lastSessionId: null, createdAt: now, updatedAt: now, lastUsedAt: now };
       loaded = { version: VERSION, activeWorkspaceId: item.id, items: [item] };
-      await prepareWorkspace(canonicalDefault);
+      await this.prepareLayout(canonicalDefault);
       validateWorkspaceSettings(canonicalDefault);
       this.data = loaded;
       await this.persist(false);
@@ -53,7 +54,7 @@ export class WorkspaceRegistry {
     if (!configuredActive || !await directoryAvailable(configuredActive.canonicalRoot)) {
       throw fault(409, '上次使用的工作区不可用，未自动切换到其他工作区');
     }
-    await prepareWorkspace(configuredActive.canonicalRoot);
+    await this.prepareLayout(configuredActive.canonicalRoot);
     validateWorkspaceSettings(configuredActive.canonicalRoot);
     await this.persist(false);
     return this;
@@ -82,7 +83,7 @@ export class WorkspaceRegistry {
       if (this.data.items.some((item) => item.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase())) throw fault(409, "工作区名称已存在");
       const now = new Date().toISOString();
       const item = { id: crypto.randomUUID(), name: cleanName, root: canonicalRoot, canonicalRoot, isDefault: false, lastSessionId: null, createdAt: now, updatedAt: now, lastUsedAt: now };
-      await prepareWorkspace(canonicalRoot);
+      await this.prepareLayout(canonicalRoot);
       validateWorkspaceSettings(canonicalRoot);
       this.data.items.push(item);
       return { ...item, available: true };
@@ -116,7 +117,7 @@ export class WorkspaceRegistry {
     const item = this.get(id);
     const canonical = await this.validateRoot(item.canonicalRoot);
     if (!samePath(canonical, item.canonicalRoot, this.platform)) throw fault(409, "工作区真实路径已变化，请移除后重新添加");
-    await prepareWorkspace(canonical);
+    await this.prepareLayout(canonical);
     validateWorkspaceSettings(canonical);
     return item;
   }

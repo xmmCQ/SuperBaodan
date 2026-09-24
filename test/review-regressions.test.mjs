@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createAgentEventStream } from '../app/renderer/core/event-stream.js';
-import { createRuntimeContext } from '../app/services/runtime-context.mjs';
+import { createAgentContext } from './helpers/agent-context.mjs';
 import { sdkHarness, deferred, wait } from './helpers/fake-sdk-host.mjs';
 
 function streamFixture() {
@@ -45,12 +45,11 @@ test('退出先解除SDK启动弹窗，随后等待已提交写入完成', { tim
   const h = await sdkHarness({ bind: async (_session, bindings) => { answer = await bindings.uiContext.editor('startup', 'draft'); } });
   const writeGate = deferred();
   t.after(async () => { writeGate.resolve(); await h.cleanup(); });
-  const c = await createRuntimeContext({
+  const c = await createAgentContext({
     workspaceDir: h.temp.resolve('workspace'), piAgentDir: h.temp.resolve('agent'), piSessionDir: h.temp.resolve('sessions'),
     backupDir: h.temp.resolve('backups'), todoFile: h.temp.resolve('todo.md'),
     vskillFile: h.temp.resolve('vskills.json'), dailyRecordFile: h.temp.resolve('records.json'), workspaceFile: h.temp.resolve('workspaces.json'),
-  });
-  await c.piRuntime.close(); c.piRuntime = h.runtime;
+  },{createRuntime:()=>h.runtime});
   t.after(() => c.piAdmin.close());
   const starting = h.runtime.ensureStarted(); starting.catch(() => {});
   for (let i = 0; i < 100 && !h.runtime.pendingUiRequests().length; i++) await wait(5);

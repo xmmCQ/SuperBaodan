@@ -1,19 +1,21 @@
-import { captureWorkspace, withWorkspaceSnapshot } from '../workspace-operations.mjs';
 import { fault } from "../../shared/errors.js";
 import { existsSync } from "node:fs";
 
 export function registerSystemCommands(commands) {
   commands.set("system.status", async (args, context) => {
-    const { piRuntime, piAdmin, activeWorkspace, config } = context;
+    const { activeWorkspace, config } = context;
+    const agent=context.agent?.snapshot || {};
     return {
       ok: true,
       runtime: "windows-node-sdk",
       sourceAvailable: existsSync(config.todoFile),
-      assistantInstalled: Boolean(piRuntime.findSdkEntry()),
-      assistantRunning: piRuntime.running,
-      assistantState: piRuntime.state,
-      assistantIdleTimeoutMs: piRuntime.idleTimeoutMs,
-      assistantMaintenance: piAdmin.maintenanceActive,
+      assistantInstalled: agent.installed !== false,
+      assistantRunning: Boolean(agent.running),
+      assistantState: agent.state || 'stopped',
+      assistantIdleTimeoutMs: agent.idleTimeoutMs,
+      assistantMaintenance: Boolean(agent.maintenance),
+      agentProcessState: agent.processState || 'idle',
+      agentRunId: agent.agentRunId || null,
       workspaceSwitching: context.workspaceSwitching,
       workspace: context.publicWorkspace(activeWorkspace),
       assistantUrl: "/assistant.html",
@@ -21,14 +23,6 @@ export function registerSystemCommands(commands) {
       desktopInstanceId: config.desktopInstanceId,
       desktopControlled: Boolean(config.desktopControlled),
     };
-  });
-
-  commands.set('agent.start', async (args, context, signal) => {
-    const snapshot = captureWorkspace(context, args.workspaceId);
-    return withWorkspaceSnapshot(context, snapshot, args.workspaceId, async () => {
-      await context.ensureActiveStarted(snapshot);
-      return { ok: true, url: '/assistant.html' };
-    }, { signal, maintenance: true });
   });
 
   commands.set("documents.read", async (args, context) => {

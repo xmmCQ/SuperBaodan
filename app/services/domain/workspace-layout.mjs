@@ -64,6 +64,20 @@ export async function assertNotInsidePark(root) {
   }
 }
 
+// Local-process inspection never creates managed resources. All Park writes
+// and SDK resource preparation belong to the Agent process.
+export async function inspectWorkspace(root) {
+  const canonical=await realpath(root),layout=workspaceLayout(canonical);
+  if(!(await lstat(canonical)).isDirectory())throw fail('工作区不是目录');
+  await assertNotInsidePark(canonical);
+  for(const dir of [layout.parkRoot,layout.projectSkillRoot,layout.cacheRoot,path.join(layout.parkRoot,'tmp'),path.join(layout.parkRoot,'.agents','skills')])await assertManagedPath(layout,dir);
+  for(const file of [layout.markerFile,layout.projectPromptFile,layout.projectSkillLockFile,layout.projectSettingsFile])await assertManagedPath(layout,file,{file:true});
+  const marker=await lstat(layout.markerFile).catch(missing);
+  if(marker){const value=JSON.parse(await readFile(layout.markerFile,'utf8'));if(value.owner!==OWNER||value.version!==LAYOUT_VERSION||value.migration&&value.migration.state!=='complete')throw fail('BaodanPark归属、结构版本或迁移状态不兼容');}
+  else if(await lstat(layout.parkRoot).catch(missing)){if((await readdir(layout.parkRoot)).length)throw fail('BaodanPark为未标记的非空目录，不能自动接管');}
+  return layout;
+}
+
 export async function prepareWorkspace(root, { sessionId, allowMigration = false } = {}) {
   const canonical = await realpath(root);
   if (!(await lstat(canonical)).isDirectory()) throw fail('工作区不是目录');

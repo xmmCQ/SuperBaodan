@@ -13,9 +13,6 @@ export function registerWorkspaceCommands(commands) {
     const root = context.workspaceService.rootReal;
     return { ...await readProjectPrompt(root), workspaceId };
   });
-  commands.set("projectPrompt.save", async (args, context) => {
-    return await context.saveProjectPrompt(args);
-  });
   commands.set("workspaces.list", async (args, context) => {
     return await context.publicWorkspaceList();
   });
@@ -59,9 +56,9 @@ export function registerWorkspaceCommands(commands) {
     context.assertActiveWorkspace(args.workspaceId);
     return await context.workspaceService.tree(args.path || "", args.depth);
   });
-  commands.set("files.search", async (args, context) => {
+  commands.set("files.search", async (args, context, signal) => {
     context.assertActiveWorkspace(args.workspaceId);
-    return { results: await context.workspaceService.search(args.q || "") };
+    return { results: await context.workspaceService.search(args.q || "", {signal}) };
   });
   commands.set("files.preview", async (args, context) => {
     context.assertActiveWorkspace(args.workspaceId);

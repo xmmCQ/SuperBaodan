@@ -31,7 +31,7 @@ export function createAgentEventStream({
   }
   function deliver(event) {
     try {
-      if ((event.type === 'workspace_changed' && !event.renamed) || ['runtime_stopping', 'connected'].includes(event.type) || (event.type === 'runtime_ready' && sessionId && sessionId !== event.state?.sessionId)) reset();
+      if ((event.type === 'workspace_changed' && !event.renamed) || ['runtime_stopping', 'runtime_exit', 'connected'].includes(event.type) || (event.type === 'runtime_ready' && sessionId && sessionId !== event.state?.sessionId)) reset();
       if (event.type === 'runtime_ready') sessionId = event.state?.sessionId || null;
       if (!pending) { dispatch(event); return; }
       if (queued.length < 128) { queued.push(event); return; }

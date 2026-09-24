@@ -17,6 +17,8 @@ import { createSettingsPanel } from './settings-panel.js';
 import { createWorkspaceController } from "/assistant/workspace-controller.js?v=2";
 import { createBootstrapLoader } from '../core/bootstrap-loader.js';
 import { bindModelPicker } from '../core/model-picker-popover.js';
+import { createAgentRecovery } from '../core/agent-ui.js';
+import { createModelCatalogSync } from '../core/model-catalog-sync.js';
 
 const state = createAssistantState();
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
@@ -45,6 +47,7 @@ const workspaceSwitcher = createWorkspaceSwitcher({
     workspace?.setWorkspace(active);
     workspace?.scheduleWorkspaceReload(`已切换到工作区：${active.name}`);
   },
+  onActivationFailed: () => chat?.syncMessagesFromAgent(),
   onError: showError,
 });
 const currentWorkspaceId = () => workspace?.workspace()?.id || null;
@@ -88,9 +91,11 @@ sessions = createSessionsView({
   captureContext: agentClient.captureContext, capturePreferences: agentClient.captureWorkspace,
 }));
 
+const modelCatalogSync = createModelCatalogSync({scope:currentWorkspaceId,capture:agentClient.captureWorkspace,read:()=>invoke('models.catalog',{}),apply:models.acceptModelCatalog,onError:showError});
+const agentRecovery=createAgentRecovery({mount:document.querySelector('.composer-wrap'),client:agentClient,reload:loadBootstrap,notice:showNotice});
 const agentEvents = createAgentEventStream({
   captureContext: () => agentClient.captureContext({ allowTransition: true }),
-  onEvent: (event) => { chat.setLastAgentEventAt(Date.now()); handleAgentEvent(event); },
+  onEvent: (event) => { agentRecovery.event(event); if(['runtime_exit','runtime_stopping'].includes(event.type))chat.resetAgentUi(); chat.setLastAgentEventAt(Date.now()); handleAgentEvent(event); },
   onStatus: (status, detail) => {
     if (status === "open" && detail.reconnected) void chat.syncMessagesFromAgent();
     else if (status === "reconnecting") chat.setRuntime("事件连接中断，正在重连", "error");
@@ -165,7 +170,7 @@ async function applyBootstrap(data, current) {
 }
 
 function handleAgentEvent(event) {
-  if (event.type === 'models_changed') { void models.syncModelCatalog(); return; }
+  if (event.type === 'models_changed') { void modelCatalogSync.receive(event); return; }
   const agentState = agentClient.applyEvent(event);
   chat.observeSyncEvent(event);
   switch (event.type) {

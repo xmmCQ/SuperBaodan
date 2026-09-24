@@ -4,8 +4,7 @@ import http from 'node:http';
 import { createCommands } from '../../app/services/commands/index.mjs';
 import { FIXTURE_OPERATIONS } from './fixture-operations.mjs';
 
-export function createServerApplication(context) {
-  const commands = createCommands(context);
+export function createServerApplication(context, commands = createCommands(context)) {
   const routes = Object.entries(FIXTURE_OPERATIONS).map(([name, spec]) => {
     const [method, pattern] = spec.split(' ');
     return { name, method: method.toUpperCase(), regex: new RegExp('^'+pattern.replace(':id','([^/]+)')+'$') };

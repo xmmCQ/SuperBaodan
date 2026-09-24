@@ -16,21 +16,14 @@ export function createModelsController({
   capturePreferences = captureContext,
   onCatalogChanged
 }) {
-  let availableModels = [], preferences, catalogRead = 0, configConfirming = false;
-  function applyModelCatalog(catalog) { catalogRead += 1; setEnabledModels(catalog.enabledModels,catalog.visibleModelKeys); renderModels(catalog.models || [], state.currentModel); }
-  function notifyCatalog(catalog) { catalogRead += 1; (onCatalogChanged || applyModelCatalog)(catalog); }
-  function getPreferences() { return preferences ||= createModelPreferences({elements:el,invoke,uiDialogs,showSettingsToast,onCatalog:notifyCatalog,captureContext:capturePreferences}); }
-  async function syncModelCatalog() {
-    const current = capturePreferences(), request = ++catalogRead;
-    let catalog;
-    try { catalog = await invoke('models.catalog',{}); }
-    catch (error) { if (current() && request === catalogRead) showError?.(error); return; }
-    if (!current() || request !== catalogRead) return;
-    try {
-      if (preferences && !preferences.isBusy()) preferences.accept(catalog);
-      else notifyCatalog(catalog);
-    } catch (error) { if (current()) showError?.(error); }
+  let availableModels = [], preferences, configConfirming = false;
+  function applyModelCatalog(catalog) { setEnabledModels(catalog.enabledModels,catalog.visibleModelKeys); renderModels(catalog.models || [], state.currentModel); }
+  function notifyCatalog(catalog) { (onCatalogChanged || applyModelCatalog)(catalog); }
+  function acceptModelCatalog(catalog) {
+    if (preferences && !preferences.isBusy()) preferences.accept(catalog);
+    else notifyCatalog(catalog);
   }
+  function getPreferences() { return preferences ||= createModelPreferences({elements:el,invoke,uiDialogs,showSettingsToast,onCatalog:notifyCatalog,captureContext:capturePreferences}); }
   const validModel = (model) => Boolean(model?.provider && model?.id && model.provider !== "unknown" && model.id !== "unknown");
   const KEEP_SECRET = "__SUPER_BAODAN_KEEP_SECRET__";
   const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -285,5 +278,5 @@ async function canLeaveModelConfig() {
     if (agentState?.thinkingLevel) el.thinkingSelect.value = agentState.thinkingLevel;
     updateModelPickerButton();
   }
-  return { setEnabledModels, applyAgentState, resolveEnabledModels, switchModel, switchThinking, renderModels, renderModelPicker, updateModelPickerButton, renderThinking, loadModelsConfig, renderConfigSelectors, loadProviderForm, loadModelForm, clearProviderForm, clearModelForm, parseJsonField, numberOrUndefined, setSelectValue, commitModelForm, commitProviderForm, assignOrDelete, changeProviderConfig, changeModelConfig, addProviderConfig, deleteProviderConfig, addModelConfig, duplicateModelConfig, deleteModelConfig, saveModelsConfig, testConfiguredModel, loadModelCatalog, supportedThinkingLevels, modelScopeMatches, canLeavePreferences, canLeaveModelConfig, hasPreferencesDraft, applyModelCatalog, syncModelCatalog };
+  return { setEnabledModels, applyAgentState, resolveEnabledModels, switchModel, switchThinking, renderModels, renderModelPicker, updateModelPickerButton, renderThinking, loadModelsConfig, renderConfigSelectors, loadProviderForm, loadModelForm, clearProviderForm, clearModelForm, parseJsonField, numberOrUndefined, setSelectValue, commitModelForm, commitProviderForm, assignOrDelete, changeProviderConfig, changeModelConfig, addProviderConfig, deleteProviderConfig, addModelConfig, duplicateModelConfig, deleteModelConfig, saveModelsConfig, testConfiguredModel, loadModelCatalog, supportedThinkingLevels, modelScopeMatches, canLeavePreferences, canLeaveModelConfig, hasPreferencesDraft, applyModelCatalog, acceptModelCatalog };
 }

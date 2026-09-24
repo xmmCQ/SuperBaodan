@@ -2,11 +2,11 @@ import { fault } from '../../shared/errors.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { prepareWorkspace } from './workspace-layout.mjs';
+import { inspectWorkspace } from './workspace-layout.mjs';
 const fail = (message, statusCode = 400) => fault(statusCode, message);
 const LIMIT = 128 * 1024;
 export async function readProjectPrompt(root) {
-  const { projectPromptFile: file } = await prepareWorkspace(root);
+  const { projectPromptFile: file } = await inspectWorkspace(root);
   let bytes;
   try {
     const info = await fs.lstat(file);

@@ -18,7 +18,7 @@ export function registerModelCommands(commands) {
       if (context.workspaceSwitching || context.shuttingDown) throw fault(409, '工作区正在切换或服务正在退出，请稍后重试');
       const admin = context.piAdmin;
       const result = await admin[method](args,{signal});
-      if (context.piAdmin === admin) context.emitAgentEvent?.({type:'models_changed'});
+      if (context.piAdmin === admin) context.emitAgentEvent?.({type:'models_changed',workspaceId:context.activeWorkspace?.id,catalog:result});
       return {ok:true,...result};
     });
   }

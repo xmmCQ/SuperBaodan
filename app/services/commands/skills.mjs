@@ -21,18 +21,6 @@ export function registerSkillCommands(commands) {
   commands.set("skills.updateCustom", mutation("updateCustom"));
   commands.set("skills.deleteCustom", mutation("deleteCustom"));
 
-  commands.set("vskills.list", async (args, context) => {
-    return { vskills: await context.vskillManager.list() };
-  });
-  commands.set("vskills.create", async (args, context) => {
-    return { ok: true, vskill: await context.vskillManager.create(args) };
-  });
-  commands.set("vskills.update", async (args, context) => {
-    return { ok: true, vskill: await context.vskillManager.update(args.id, args) };
-  });
-  commands.set("vskills.delete", async (args, context) => {
-    return { ok: true, deleted: await context.vskillManager.delete(args.id) };
-  });
 }
 
 function mutation(action) {

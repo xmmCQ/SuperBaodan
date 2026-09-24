@@ -1,3 +1,4 @@
+import { createAgentUi } from '../core/agent-ui.js';
 import { createSnapshotRecovery } from '../core/snapshot-recovery.js';
 import { createMessageWindow, HISTORY_TOP_THRESHOLD, prependPreviousMessages, afterHistoryRestore } from "../core/chat-lazy-load.js";
 import { messageBodyText as chatMessageText } from "../core/reply-actions.js";
@@ -32,6 +33,7 @@ export function createHomeChat({
     bindModelPicker({ button: el.modelPickerButton, panel: el.modelPickerPanel, filter: el.modelFilter, render: modelControls.renderModelPicker });
     el.thinkingSelect.addEventListener('change', modelControls.switchThinking);
   }
+  const agentUi=createAgentUi({command:(...args)=>agentClient.command(...args),uiDialogs,input:el.chatInput,resize:autoResizeInput,notice:toast,error:error=>toast(error.message,true)});
   const HOME_ASSISTANT_WORKING_TEXT = "努力搬砖中！";
   const CHAT_BOTTOM_THRESHOLD = 80;
   let stickToChatBottom = true, liveCurrent = null;
@@ -128,7 +130,8 @@ async function syncHomeChatMessages() {
   } catch (error) { if (!error.staleResponse) { snapshotRecovery.recovered(); console.warn(error); } }
 }
 function handleHomeChatEvent(event) {
-  if (event.type === 'models_changed') { void modelControls?.syncModelCatalog(); return; }
+  if (event.type==='extension_ui_request') { void agentUi.handle(event); return; }
+  if (event.type==='runtime_exit'||event.type==='runtime_stopping'||event.type==='workspace_changed'&&!event.renamed) agentUi.reset();
   const agentState = agentClient.applyEvent(event);
   snapshotRecovery.event(event);
   if (event.type === "extension_error") toast(event.error || "扩展执行失败", true);

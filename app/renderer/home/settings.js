@@ -55,5 +55,5 @@ export function createHomeSettings({ trigger, elements, invoke, agentClient, get
     finally { opening = false; trigger.disabled = false; }
   }
   return { open, hasDraft: () => Boolean(panel?.projectPrompt.hasDraft()),
-    syncModels: () => panel?.models.syncModelCatalog(), discard: () => panel?.projectPrompt.discard(), contextChanged: () => panel?.projectPrompt.contextChanged() };
+    applyModelCatalog: data => { if (panel) panel.models.acceptModelCatalog(data); else onCatalogChanged(data); }, discard: () => panel?.projectPrompt.discard(), contextChanged: () => panel?.projectPrompt.contextChanged() };
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applicationDataPrompt } from '../app/services/domain/app-data-context.mjs';
-import { createRuntimeContext } from '../app/services/runtime-context.mjs';
+import { createAgentContext } from './helpers/agent-context.mjs';
 import { findSdkEntry } from '../app/services/domain/pi-sdk-factory.mjs';
 import { createTempProject } from './helpers/temp-project.mjs';
 
@@ -36,7 +36,7 @@ test('真实SDK：应用路径保留项目提示，重载、恢复会话和切�
     await temp.write('workspace/AGENTS.md', 'PROJECT_CONTEXT_MUST_REMAIN');
     await temp.write('agent/APPEND_SYSTEM.md', 'USER_APPEND_MUST_REMAIN');
     await temp.writeJson('agent/settings.json', { packages: [] });
-    context = await createRuntimeContext(config);
+    context = await createAgentContext(config);
     const expected = applicationDataPrompt({ todoFile: config.todoFile, dailyRecordFile: config.dailyRecordFile });
     const check = () => {
       const prompt = context.piRuntime.host.session.agent.state.systemPrompt;
@@ -54,8 +54,9 @@ test('真实SDK：应用路径保留项目提示，重载、恢复会话和切�
     await context.piRuntime.stop('idle');
     await context.piRuntime.ensureStarted(); check();
     assert.equal(context.piRuntime.host.session.sessionId, sessionId);
-    const target = await context.workspaceRegistry.add({ path: await temp.ensureDir('另一个 工作区'), name: '另一个工作区' });
-    await context.activateWorkspace(target.id);
+    const root=await temp.ensureDir('另一个 工作区'),target={id:'other',root,canonicalRoot:root,name:'另一个工作区'};
+    await context.prepareSwitch({operationId:'switch-app-path',workspace:target,epoch:1});
+    await context.commitSwitch({operationId:'switch-app-path',epoch:1});
     await context.piRuntime.ensureStarted(); check();
     assert.deepEqual(context.piRuntime.dataPaths, { todoFile: config.todoFile, dailyRecordFile: config.dailyRecordFile });
   } finally {

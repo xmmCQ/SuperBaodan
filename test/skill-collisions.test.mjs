@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, rm, writeFile, symlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { createRuntimeContext } from '../app/services/runtime-context.mjs';
+import { createAgentContext } from './helpers/agent-context.mjs';
 import path from 'node:path';
 import { SkillManager } from '../app/services/domain/skill-manager.mjs';
 import { buildSkillMarkdown, parseSkillMarkdown } from '../app/services/domain/skill-markdown.mjs';
@@ -81,11 +82,11 @@ test('启动和重启不再把项目技能复制到全局', async t => {
     vskillFile: temp.resolve('vskills.json'), workspaceFile: temp.resolve('workspaces.json'),
   };
   for (let i = 0; i < 2; i++) {
-    const context = await createRuntimeContext(config);
+    const context = await createRuntimeContext(config),agent=await createAgentContext(config);
     try {
       assert.equal(existsSync(temp.resolve('agent/skills/ultimate-workhorse')), false);
       assert.equal(await readFile(temp.resolve(source), 'utf8'), content);
-    } finally { await context.shutdown(); }
+    } finally { await agent.shutdown(); await context.shutdown(); }
   }
 });
 

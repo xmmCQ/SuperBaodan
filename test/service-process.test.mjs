@@ -18,11 +18,13 @@ async function fixture(t) {
   const exited = new Promise(resolve => child.once('exit', resolve));
   t.after(async () => { if (child.exitCode == null) child.kill(); await exited; await rm(root, { recursive: true, force: true }); });
   child.stdout.resume(); child.stderr.resume();
+  await message(child, m => m.type === 'hello');
+  child.send({v:1,type:'boot',runId});
   await message(child, m => m.type === 'ready');
   let sequence = 0;
   const invoke = async (name, args = {}) => {
     const id = String(++sequence); const result = message(child, m => m.type === 'result' && m.id === id);
-    child.send({ type: 'invoke', runId, id, name, args }); return result;
+    child.send({ v:1, type: 'invoke', runId, id, name, args }); return result;
   };
   return { child, invoke, runId, exited, root };
 }
@@ -45,9 +47,9 @@ test('独立业务进程通过IPC就绪、命令调用及正常退出', { timeou
   assert.equal(Buffer.from(content.value.content).toString(), '隔离文件');
   assert.equal((await invoke('files.content', { workspaceId: 'stale', path: 'test.png' })).error.code, 409);
   assert.ok((await invoke('files.content', { workspaceId, path: '../work-todo.md' })).error);
-  child.send({ type: 'shutdown', runId: 'wrong' });
+  child.send({ v:1, type: 'shutdown', runId: 'wrong' });
   assert.equal((await invoke('system.status')).value.ok, true);
-  child.send({ type: 'shutdown', runId });
+  child.send({ v:1, type: 'shutdown', runId });
   assert.equal(await exited, 0);
 });
 
@@ -62,8 +64,8 @@ test('IPC取消到达服务端并停止会话搜索，后续普通搜索和写�
   for (let i = 0; i < 3; i++) {
     const id = `cancel-search-${i}`;
     const result = message(child, m => m.type === 'result' && m.id === id);
-    child.send({ type: 'invoke', runId, id, name: 'sessions.search', args: { workspaceId: workspace.id, q: 'absent' } });
-    child.send({ type: 'cancel', runId, id });
+    child.send({ v:1, type: 'invoke', runId, id, name: 'sessions.search', args: { workspaceId: workspace.id, q: 'absent' } });
+    child.send({ v:1, type: 'cancel', runId, id });
     assert.equal((await result).error?.code, 499);
   }
   assert.equal((await invoke('sessions.search', { workspaceId: workspace.id, q: 'temporary' })).error, undefined);

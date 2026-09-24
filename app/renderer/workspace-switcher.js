@@ -1,4 +1,4 @@
-export function createWorkspaceSwitcher({ trigger, invoke, uiDialogs, showPathTooltip = true, hasDraft = () => false, getDraftWarning = () => '切换工作区将清空当前未发送的内容。', clearDraft = () => {}, onActivating = () => {}, onActivated = async () => {}, onError = console.error }) {
+export function createWorkspaceSwitcher({ trigger, invoke, uiDialogs, showPathTooltip = true, hasDraft = () => false, getDraftWarning = () => '切换工作区将清空当前未发送的内容。', clearDraft = () => {}, onActivating = () => {}, onActivated = async () => {}, onActivationFailed = async () => {}, onError = console.error }) {
   let data = { activeWorkspaceId: null, items: [] };
   const manager = buildManagerDialog();
   const picker = buildPickerDialog();
@@ -103,7 +103,11 @@ export function createWorkspaceSwitcher({ trigger, invoke, uiDialogs, showPathTo
       sync({ workspace: result.workspace });
       manager.dialog.close();
       await onActivated(result);
-    } catch (error) { onError(error); }
+    } catch (error) {
+      finishTransition?.(); finishTransition = null;
+      onError(error);
+      try { await load(); await onActivationFailed(); } catch { /* Keep the original failure and drafts. */ }
+    }
     finally { finishTransition?.(); manager.dialog.classList.remove("busy"); }
   }
 

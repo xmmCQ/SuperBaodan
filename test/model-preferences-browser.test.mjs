@@ -13,7 +13,9 @@ for(const page of ['home','assistant'])test(`${page}模型偏好：独立保存�
     api.context.emitAgentEvent=event=>{for(const client of fixture.state.eventClients)client.write('data: '+JSON.stringify(event)+'\n\n');};
     fixture.state.modelCommand=async(name,args)=>{const result=await api.command(name,args);fixture.state.modelCatalog=await api.command('models.catalog');return result;};
   }});if(!scenario)return;
-  const {browser:b,navigate,fixture}=scenario;await navigate(page==='home'?'/':'/assistant.html');
+  const {browser:b,navigate,fixture}=scenario;
+  await b.addInitScript(`const invoke=window.workbench.invoke;window.catalogReads=0;window.workbench.invoke=(id,name,args)=>{if(name==='models.catalog')catalogReads++;return invoke(id,name,args);};`);
+  await navigate(page==='home'?'/':'/assistant.html');
   await b.waitFor("modelPickerButton.textContent==='模型 B'");
   const messageSelector=page==='home'?'#chatMessages':'#messages';
   const originalMessages=await b.evaluate(`document.querySelector('${messageSelector}').textContent`);
@@ -31,7 +33,9 @@ for(const page of ['home','assistant'])test(`${page}模型偏好：独立保存�
   await toggle('p/b');
   await b.evaluate("pref('defaultModelSelect').value='q/c';pref('defaultModelSelect').dispatchEvent(new Event('change'))");
   assert.deepEqual(await b.evaluate("[...pref('defaultThinking').options].map(o=>o.value)"),['off']);
+  const initialReads=await b.evaluate('catalogReads');
   await b.evaluate("pref('saveModelDisplay').click()");await b.waitFor("pref('saveModelDisplay').disabled&&!pref('refreshModelCatalog').disabled");
+  assert.equal(await b.evaluate('catalogReads'),initialReads,'操作结果及目录事件不应触发重复读取');
   assert.deepEqual((await api.readPreferences()).enabledModels,['p/a','q/c']);assert.equal((await api.readPreferences()).defaultModel,'a');
   assert.equal(await b.evaluate("pref('defaultModelSelect').value"),'q/c');assert.equal(await b.evaluate("pref('saveModelDefaults').disabled"),false);
   assert.equal(await b.evaluate('modelPickerButton.textContent'),'模型 B');

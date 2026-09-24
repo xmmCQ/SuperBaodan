@@ -123,8 +123,8 @@ export function createAgentClient({
     return data;
   }
 
-  function launch(options = {}) {
-    return request("agent.start", { ...(workspacePayload({}, getWorkspaceId())) }, { ...options });
+  function launch({retry = false,...options} = {}) {
+    return request("agent.start", { ...workspacePayload({}, getWorkspaceId()), ...(retry?{retry:true}:{}) }, options);
   }
 
   async function command(payload, options = {}) {

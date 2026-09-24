@@ -7,7 +7,7 @@ import { supportedThinkingLevels } from '../../app/shared/model-preferences.js';
 export async function modelPreferencesFixture(root) {
   const agentDir=path.join(root,'model-preference-agent');await mkdir(agentDir,{recursive:true});
   const model=(provider,id,reasoning=true)=>({provider,id,name:`模型 ${id.toUpperCase()}`,reasoning,thinkingLevels:reasoning?['off','medium','high']:['off']});
-  const state={models:[model('p','a'),model('p','b'),model('q','c',false),model('p','d')],remote:null,failures:new Set(),networkCalls:0,syncCalls:0,stopCalls:0,writes:[],refreshGate:null};
+  const state={models:[model('p','a'),model('p','b'),model('q','c',false),model('p','d')],remote:null,failures:new Set(),networkCalls:0,runtimeCreates:0,syncCalls:0,stopCalls:0,writes:[],refreshGate:null};
   const preferencesFile=path.join(agentDir,'settings.json');
   await writeFile(preferencesFile,JSON.stringify({defaultProvider:'p',defaultModel:'a',defaultThinkingLevel:'medium',enabledModels:['p/a','p/b','q/c'],unrelated:'keep'}));
   await writeFile(path.join(agentDir,'auth.json'),JSON.stringify({p:{type:'api_key',key:'isolated-key'},q:{type:'oauth',access:'isolated-access',refresh:'isolated-refresh',expires:Date.now()+3600000}}));
@@ -23,6 +23,7 @@ export async function modelPreferencesFixture(root) {
   };
   admin.modelCatalog.thinkingCapabilities=async()=>supportedThinkingLevels;
   admin.createRuntime=async options=>{
+    state.runtimeCreates++;
     if(options?.allowModelNetwork!==false)throw Error('普通读取必须离线');
     return {getAvailableSnapshot:()=>state.models,getProviders:()=>['p','q','unused'].map(id=>({id,refreshModels(){}})),getProviderAuthStatus:id=>({configured:id!=='unused'}),
       async refresh(options){
